@@ -46,19 +46,22 @@ describe("normalizeAgentState / type", () => {
 });
 
 describe("fixture inventory and safety", () => {
-  it("manifest lists synthetic fixtures with explicit provenance", async () => {
+  it("manifest lists fixtures with explicit provenance", async () => {
     const manifest = (await loadJson("manifest.json")) as {
       schemaVersion: string;
       fixtures: Array<{ path: string; provenance: string; scenario: string }>;
     };
     assert.equal(manifest.schemaVersion, SCHEMA_VERSION);
     assert.ok(manifest.fixtures.length >= 5);
+    const provenances = new Set(manifest.fixtures.map((f) => f.provenance));
+    assert.ok(provenances.has("synthetic"));
     for (const f of manifest.fixtures) {
-      assert.equal(f.provenance, "synthetic");
+      assert.ok(f.provenance === "synthetic" || f.provenance === "observed");
       const body = (await loadJson(f.path)) as {
         meta: { provenance: string; scenario: string; schemaVersion: string };
+        worktreePs?: { result?: { worktrees?: Array<{ repo?: string; displayName?: string; branch?: string }> } };
       };
-      assert.equal(body.meta.provenance, "synthetic");
+      assert.equal(body.meta.provenance, f.provenance);
       assert.equal(body.meta.scenario, f.scenario);
       assert.equal(body.meta.schemaVersion, SCHEMA_VERSION);
       const serialized = JSON.stringify(body);
@@ -66,6 +69,13 @@ describe("fixture inventory and safety", () => {
       assert.equal(/"prompt"\s*:/.test(serialized), false);
       assert.equal(/"toolInput"\s*:/.test(serialized), false);
       assert.equal(/\/Users\//.test(serialized), false);
+      if (f.provenance === "observed") {
+        for (const wt of body.worktreePs?.result?.worktrees ?? []) {
+          assert.match(wt.repo ?? "", /^repo_\d+$/);
+          assert.match(wt.displayName ?? "", /^name_\d+$/);
+          if (wt.branch) assert.match(wt.branch, /^branch_\d+$/);
+        }
+      }
     }
   });
 
@@ -293,5 +303,61 @@ describe("tolerant decoders", () => {
     assert.equal(serialized.includes("/Users/"), false);
     assert.equal(serialized.includes(rawWorktreeId), false);
     assert.match(bundle.worktreePs.result?.worktrees[0]?.pathPlaceholder ?? "", /^<redacted-path:#0>$/);
+  });
+
+  it("observed provenance replaces human-readable repo/branch/name identity", () => {
+    const bundle = buildRedactedFixture({
+      provenance: "observed",
+      scenario: "observed-identity",
+      worktreePs: {
+        ok: true,
+        result: {
+          worktrees: [
+            {
+              worktreeId: "repo-id::/Users/frank/secret-project",
+              hostId: "local",
+              repo: "orca-deck",
+              displayName: "frank-main",
+              branch: "refs/heads/main",
+              repoId: "25fcf1c8-f036-4bb3-976a-a151ae2ef619",
+              worktreeInstanceId: "d84bf616-4e7f-45a7-9e68-d940ff614f59",
+              agents: [{ paneKey: "t:l", state: "done", agentType: "omp" }],
+            },
+          ],
+        },
+      },
+      terminalList: {
+        ok: true,
+        result: {
+          terminals: [
+            {
+              handle: "term_x",
+              worktreeId: "repo-id::/Users/frank/secret-project",
+              tabId: "t",
+              leafId: "l",
+              connected: true,
+              writable: true,
+            },
+          ],
+        },
+      },
+    });
+
+    const wt = bundle.worktreePs.result?.worktrees[0];
+    const term = bundle.terminalList.result?.terminals[0];
+    assert.equal(wt?.worktreeId, "wt_0");
+    assert.equal(term?.worktreeId, "wt_0");
+    assert.equal(wt?.repo, "repo_0");
+    assert.equal(wt?.displayName, "name_0");
+    assert.equal(wt?.branch, "branch_0");
+    assert.equal(wt?.repoId, "25fcf1c8-f036-4bb3-976a-a151ae2ef619");
+    assert.equal(wt?.worktreeInstanceId, "d84bf616-4e7f-45a7-9e68-d940ff614f59");
+
+    const serialized = JSON.stringify(bundle);
+    assertSafeFixtureJson(serialized);
+    assert.equal(serialized.includes("orca-deck"), false);
+    assert.equal(serialized.includes("frank-main"), false);
+    assert.equal(serialized.includes("refs/heads/main"), false);
+    assert.equal(serialized.includes("/Users/"), false);
   });
 });

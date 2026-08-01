@@ -39,8 +39,18 @@
       "provenance": "synthetic",
       "scenario": "unknown-fields-states",
       "covers": ["unknown-state", "unknown-fields", "forward-compat"]
+    },
+    {
+      "path": "observed/live-redacted.json",
+      "provenance": "observed",
+      "scenario": "live-redacted",
+      "covers": [
+        "observed-capture",
+        "identity-placeholders",
+        "worktree-terminal-join"
+      ]
     }
   ],
   "observedDir": "observed/",
-  "observedNote": "Live redacted captures written only by scripts/capture-redacted-fixtures.ts after assertSafeFixtureJson."
+  "observedNote": "Live redacted captures written only by scripts/capture-redacted-fixtures.ts after assertSafeFixtureJson. Observed provenance forces repo/displayName/branch placeholders and wt_<n> worktreeIds."
 }

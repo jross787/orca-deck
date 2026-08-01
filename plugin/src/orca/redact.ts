@@ -39,27 +39,22 @@ export function isPathLike(value: string): boolean {
   return false;
 }
 
-function safeToken(value: string | undefined | null, fallback: string): string | undefined {
-  if (value == null) return undefined;
-  if (value.length === 0) return undefined;
-  if (isPathLike(value)) return fallback;
-  return value;
-}
-
-function safeOptional(value: string | undefined | null): string | undefined {
-  if (value == null || value.length === 0) return undefined;
-  if (isPathLike(value)) return undefined;
-  return value;
+function isOpaqueId(value: string): boolean {
+  // UUIDs and similarly opaque runtime tokens may remain.
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) return true;
+  if (/^[a-z]+_[0-9a-f]{8,}$/i.test(value)) return true;
+  return false;
 }
 
 /**
  * Build a deterministic raw worktreeId → fixture worktreeId map for one bundle.
- * Path-bearing IDs become wt_<n>; safe IDs are preserved. Same map must be used
- * for worktree and terminal records so joins stay coherent.
+ * Path-bearing IDs become wt_<n>. Observed captures force every id to wt_<n>.
+ * Same map is used for worktree and terminal records so joins stay coherent.
  */
 export function buildWorktreeIdMap(
   worktrees: readonly OrcaWorktreeRecord[],
   terminals: readonly OrcaTerminalRecord[],
+  opts: { forcePlaceholders: boolean } = { forcePlaceholders: false },
 ): Map<string, string> {
   const ordered: string[] = [];
   const seen = new Set<string>();
@@ -79,7 +74,7 @@ export function buildWorktreeIdMap(
   const map = new Map<string, string>();
   let pathIndex = 0;
   for (const raw of ordered) {
-    if (isPathLike(raw)) {
+    if (opts.forcePlaceholders || isPathLike(raw)) {
       map.set(raw, `wt_${pathIndex}`);
       pathIndex += 1;
     } else {
@@ -93,21 +88,58 @@ export function redactWorktree(
   wt: OrcaWorktreeRecord,
   index: number,
   worktreeIdMap: ReadonlyMap<string, string>,
+  opts: { scrubHumanIdentity: boolean } = { scrubHumanIdentity: false },
 ): RedactedWorktreeRecord {
   const worktreeId = worktreeIdMap.get(wt.worktreeId) ?? `wt_${index}`;
+
+  let repo: string | undefined;
+  let displayName: string | undefined;
+  let branch: string | undefined;
+  if (opts.scrubHumanIdentity) {
+    repo = `repo_${index}`;
+    displayName = `name_${index}`;
+    branch = wt.branch && wt.branch.length > 0 ? `branch_${index}` : undefined;
+  } else {
+    repo = wt.repo && !isPathLike(wt.repo) ? wt.repo : `repo_${index}`;
+    displayName =
+      wt.displayName && !isPathLike(wt.displayName) ? wt.displayName : `name_${index}`;
+    if (wt.branch && wt.branch.length > 0 && !isPathLike(wt.branch)) branch = wt.branch;
+  }
+
+  let repoId = wt.repoId;
+  if (repoId && (isPathLike(repoId) || (opts.scrubHumanIdentity && !isOpaqueId(repoId)))) {
+    repoId = undefined;
+  }
+  let worktreeInstanceId = wt.worktreeInstanceId;
+  if (
+    worktreeInstanceId &&
+    (isPathLike(worktreeInstanceId) ||
+      (opts.scrubHumanIdentity && !isOpaqueId(worktreeInstanceId)))
+  ) {
+    worktreeInstanceId = undefined;
+  }
+
+  let hostId = wt.hostId;
+  if (!hostId) hostId = "local";
+  else if (isPathLike(hostId)) hostId = `host_${index}`;
+  else if (opts.scrubHumanIdentity && hostId !== "local" && !isOpaqueId(hostId)) {
+    hostId = `host_${index}`;
+  }
+
   return {
     workspaceKind: wt.workspaceKind,
     worktreeId,
-    repoId: safeToken(wt.repoId, `<redacted-repo-id:#${index}>`),
-    hostId: safeToken(wt.hostId, `<redacted-host:#${index}>`) ?? "local",
+    repoId,
+    hostId,
     terminalPlatform: wt.terminalPlatform,
-    repo: safeToken(wt.repo, `<redacted-repo:#${index}>`),
+    repo,
     pathPlaceholder: `<redacted-path:#${index}>`,
-    branch: safeOptional(wt.branch),
+    branch,
     isArchived: wt.isArchived,
     isMainWorktree: wt.isMainWorktree,
-    worktreeInstanceId: safeToken(wt.worktreeInstanceId, `<redacted-wti:#${index}>`),
-    displayName: safeToken(wt.displayName, `<redacted-name:#${index}>`),
+    worktreeInstanceId,
+    displayName,
+    workspaceStatus: wt.workspaceStatus,
     isActive: wt.isActive,
     unread: wt.unread,
     liveTerminalCount: wt.liveTerminalCount,
@@ -135,9 +167,11 @@ export function redactTerminal(
   worktreeIdMap: ReadonlyMap<string, string>,
 ): RedactedTerminalRecord {
   const worktreeId = worktreeIdMap.get(term.worktreeId) ?? `wt_orphan_${index}`;
+  let incarnationId = term.incarnationId;
+  if (incarnationId && isPathLike(incarnationId)) incarnationId = undefined;
   return {
     handlePlaceholder: `<redacted-handle:${index}>`,
-    incarnationId: safeToken(term.incarnationId, `<redacted-inc:#${index}>`),
+    incarnationId,
     orphaned: term.orphaned,
     worktreeId,
     tabId: term.tabId,
@@ -186,10 +220,14 @@ export function buildRedactedFixture(input: {
   capturedAt?: string;
   orcaAppVersion?: string;
 }): RedactedFixtureBundle {
+  const scrubHumanIdentity = input.provenance === "observed";
+  const forcePlaceholders = scrubHumanIdentity;
   const rawWorktrees = input.worktreePs.result?.worktrees ?? [];
   const rawTerminals = input.terminalList.result?.terminals ?? [];
-  const worktreeIdMap = buildWorktreeIdMap(rawWorktrees, rawTerminals);
-  const worktrees = rawWorktrees.map((wt, i) => redactWorktree(wt, i, worktreeIdMap));
+  const worktreeIdMap = buildWorktreeIdMap(rawWorktrees, rawTerminals, { forcePlaceholders });
+  const worktrees = rawWorktrees.map((wt, i) =>
+    redactWorktree(wt, i, worktreeIdMap, { scrubHumanIdentity }),
+  );
   const terminals = rawTerminals.map((t, i) => redactTerminal(t, i, worktreeIdMap));
   const meta: FixtureMeta = {
     schemaVersion: SCHEMA_VERSION,
@@ -201,7 +239,7 @@ export function buildRedactedFixture(input: {
     redaction: {
       strippedFields: [...STRIPPED_FIELDS],
       pathPolicy:
-        "absolute paths and path-bearing worktreeIds replaced via deterministic per-bundle wt_<n> map shared by worktrees and terminals; pathPlaceholder is index-only",
+        "absolute paths and path-bearing worktreeIds replaced via deterministic per-bundle wt_<n> map shared by worktrees and terminals; observed captures force wt_<n> for all worktreeIds and replace repo/displayName/branch with index placeholders; pathPlaceholder is index-only",
       handlePolicy:
         "live runtime handles replaced with handlePlaceholder; never restore as command targets from fixtures",
     },
