@@ -44,7 +44,11 @@ import { OrcaCliError } from "../../plugin/src/orca/cli.js";
 import type { RuntimeTerminalHandle } from "../../plugin/src/orca/schema.js";
 import { renderControlSvg } from "../../plugin/src/rendering/session-svg.js";
 import { MetadataStore } from "../../plugin/src/state/metadata-store.js";
-import { DashboardRuntime } from "../../plugin/src/state/runtime.js";
+import {
+  confirmDraftCliOutcome,
+  DashboardRuntime,
+} from "../../plugin/src/state/runtime.js";
+import type { OrcaCliResult } from "../../plugin/src/orca/cli.js";
 import { toPersistedState } from "../../plugin/src/state/reducer.js";
 import { assertNoHandlesInPersisted } from "../../plugin/src/state/types.js";
 
@@ -117,6 +121,18 @@ class FakeChild extends EventEmitter {
     this.emit("exit", 0, null);
     return true;
   }
+}
+
+
+function cliResult(partial: Partial<OrcaCliResult> & Pick<OrcaCliResult, "stdout" | "exitCode">): OrcaCliResult {
+  return {
+    argv: ["orca"],
+    stderr: "",
+    signal: null,
+    durationMs: 1,
+    timedOut: false,
+    ...partial,
+  };
 }
 
 describe("phase4 protocol", () => {
@@ -418,6 +434,8 @@ describe("phase4 runtime send/launch", () => {
     sessions?: () => LogicalSession[];
     mutations: string[][];
     failCode?: string;
+    /** Full CLI results for draft path confirmation tests. */
+    draftResults?: OrcaCliResult[];
   }) {
     const paths = resolveConfigPaths(opts.tmp);
     const configStore = new ConfigStore({ paths, watch: false });
@@ -459,10 +477,30 @@ describe("phase4 runtime send/launch", () => {
         },
       }),
       runMutation: async (args) => {
+        // Preset/interrupt path only — draft uses runDraftCli.
         if (opts.failCode) {
-          throw new OrcaCliError(opts.failCode as "timeout", "fail", { argv: [...args], timedOut: opts.failCode === "timeout" });
+          throw new OrcaCliError(opts.failCode as "timeout", "fail", {
+            argv: [...args],
+            timedOut: opts.failCode === "timeout",
+          });
         }
         opts.mutations.push([...args]);
+      },
+      runDraftCli: async (args) => {
+        if (opts.failCode === "timeout") {
+          throw new OrcaCliError("timeout", "fail", {
+            argv: [...args],
+            timedOut: true,
+          });
+        }
+        opts.mutations.push([...args]);
+        if (opts.draftResults && opts.draftResults.length > 0) {
+          return opts.draftResults.shift()!;
+        }
+        return cliResult({
+          exitCode: 0,
+          stdout: JSON.stringify({ ok: true, result: {} }),
+        });
       },
       spawnDraftHelper: () => new FakeChild() as unknown as ChildProcessWithoutNullStreams,
       draftHelperPath: "/tmp/fake",
@@ -657,6 +695,13 @@ describe("phase4 runtime send/launch", () => {
         runMutation: async (args) => {
           mutations.push([...args]);
         },
+        runDraftCli: async (args) => {
+          mutations.push([...args]);
+          return cliResult({
+            exitCode: 0,
+            stdout: JSON.stringify({ ok: true, result: {} }),
+          });
+        },
         spawnDraftHelper: () => new FakeChild() as unknown as ChildProcessWithoutNullStreams,
         draftHelperPath: "/tmp/fake",
       });
@@ -698,6 +743,174 @@ describe("phase4 runtime send/launch", () => {
     } finally {
       await rm(tmp, { recursive: true, force: true });
     }
+  });
+
+  it("send nonzero-with-stdout JSON preserves draft (failed, not success)", async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "oad-p4-nz-"));
+    try {
+      const mutations: string[][] = [];
+      const { runtime } = await makeRuntime({
+        tmp,
+        liveHandle: () => "H1",
+        mutations,
+        draftResults: [
+          cliResult({
+            exitCode: 3,
+            stdout: JSON.stringify({ ok: true, result: { sent: false } }),
+          }),
+        ],
+      });
+      const coord = runtime.getDraftCoordinatorForTests();
+      await coord.openOrFocus();
+      await coord.handleHelperMessageForTests({
+        version: 1,
+        type: "sendSelected",
+        requestId: "nz-send",
+        draft: "KEEP_DRAFT_BODY",
+      });
+      assert.equal(mutations.length, 1);
+      assert.equal(coord.getFace().ui, "ready");
+      assert.equal(coord.getFace().ambiguous, false);
+      assert.equal(coord.getFace().lastCode, "non_zero_exit");
+      // success would tear down helper on exited; failed keeps open face ready
+      assert.equal(coord.isOpen(), true);
+      runtime.stop();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("send ok:false exit0 preserves draft as failed", async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "oad-p4-okf-"));
+    try {
+      const mutations: string[][] = [];
+      const { runtime } = await makeRuntime({
+        tmp,
+        liveHandle: () => "H1",
+        mutations,
+        draftResults: [
+          cliResult({
+            exitCode: 0,
+            stdout: JSON.stringify({ ok: false, error: "blocked" }),
+          }),
+        ],
+      });
+      const coord = runtime.getDraftCoordinatorForTests();
+      await coord.openOrFocus();
+      await coord.handleHelperMessageForTests({
+        version: 1,
+        type: "sendSelected",
+        requestId: "okf-send",
+        draft: "KEEP_ME",
+      });
+      assert.equal(mutations.length, 1);
+      assert.equal(coord.getFace().ui, "ready");
+      assert.equal(coord.getFace().lastCode, "envelope_not_ok");
+      assert.equal(coord.isOpen(), true);
+      runtime.stop();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("launch nonzero any JSON shape fails and preserves; ok:false fails", async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "oad-p4-lnz-"));
+    try {
+      const mutations: string[][] = [];
+      const { runtime } = await makeRuntime({
+        tmp,
+        liveHandle: () => "H1",
+        mutations,
+        draftResults: [
+          cliResult({
+            exitCode: 1,
+            stdout: JSON.stringify({ ok: false, error: "exists" }),
+          }),
+          cliResult({
+            exitCode: 0,
+            stdout: JSON.stringify({ ok: false, error: "denied" }),
+          }),
+        ],
+      });
+      const coord = runtime.getDraftCoordinatorForTests();
+      await coord.openOrFocus();
+      await coord.handleHelperMessageForTests({
+        version: 1,
+        type: "launchAgent",
+        requestId: "lnz",
+        provider: "omp",
+        draft: "launch-keep",
+        worktreeName: "n1",
+      });
+      assert.equal(mutations.length, 1);
+      assert.equal(coord.getFace().lastCode, "non_zero_exit");
+      assert.equal(coord.getFace().ui, "ready");
+
+      await coord.handleHelperMessageForTests({
+        version: 1,
+        type: "launchAgent",
+        requestId: "lokf",
+        provider: "claude",
+        draft: "launch-keep-2",
+        worktreeName: "n2",
+      });
+      assert.equal(mutations.length, 2);
+      assert.equal(coord.getFace().lastCode, "envelope_not_ok");
+      assert.equal(coord.getFace().ui, "ready");
+      assert.equal(coord.isOpen(), true);
+      runtime.stop();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+
+describe("phase4 draft CLI confirmation", () => {
+  it("confirmDraftCliOutcome requires exit 0 and not ok:false", () => {
+    assert.equal(
+      confirmDraftCliOutcome(
+        cliResult({ exitCode: 0, stdout: JSON.stringify({ ok: true }) }),
+        "x",
+      ).kind,
+      "success",
+    );
+    assert.equal(
+      confirmDraftCliOutcome(
+        cliResult({ exitCode: 0, stdout: JSON.stringify({ result: {} }) }),
+        "x",
+      ).kind,
+      "success",
+    );
+    const nz = confirmDraftCliOutcome(
+      cliResult({
+        exitCode: 2,
+        stdout: JSON.stringify({ ok: true, result: { ignored: true } }),
+      }),
+      "Send failed",
+    );
+    assert.equal(nz.kind, "failed");
+    assert.equal(nz.kind === "failed" && nz.code, "non_zero_exit");
+
+    const badOk = confirmDraftCliOutcome(
+      cliResult({ exitCode: 0, stdout: JSON.stringify({ ok: false, error: "nope" }) }),
+      "Send failed",
+    );
+    assert.equal(badOk.kind, "failed");
+    assert.equal(badOk.kind === "failed" && badOk.code, "envelope_not_ok");
+
+    const empty = confirmDraftCliOutcome(cliResult({ exitCode: 0, stdout: "  " }), "x");
+    assert.equal(empty.kind, "ambiguous");
+
+    const badJson = confirmDraftCliOutcome(cliResult({ exitCode: 0, stdout: "{nope" }), "x");
+    assert.equal(badJson.kind, "ambiguous");
+
+    const timed = confirmDraftCliOutcome(
+      cliResult({ exitCode: null, stdout: "", timedOut: true }),
+      "x",
+    );
+    assert.equal(timed.kind, "ambiguous");
+    assert.equal(timed.kind === "ambiguous" && timed.code, "timeout");
   });
 });
 

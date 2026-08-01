@@ -122,3 +122,21 @@ npm run test:contracts              # 119 pass / 0 fail
 npm run build                       # overlay release → bin/orca-draft-overlay + rollup plugin.js
 npm run validate:plugin             # Validation successful
 ```
+
+## False-success fix (post-review)
+
+`executeDraftSend` / `executeDraftLaunch` no longer treat a discarded void mutation as success.
+
+- Added `runDraftCli` + exported `confirmDraftCliOutcome(result)`:
+  - **success** only when `exitCode === 0` and parsed JSON envelope is not `ok: false`
+  - **failed** (preserve draft) on nonzero exit (including stdout JSON) or `ok: false` at exit 0
+  - **ambiguous** on timeout / empty stdout / invalid JSON
+- Tests: unit confirmation matrix + runtime send/launch nonzero-with-stdout and ok:false preserve paths
+
+```text
+swift test --package-path overlay   # 24 pass
+npm run typecheck                   # pass
+npm run test:contracts              # 123 pass / 0 fail
+npm run build                       # ok
+npm run validate:plugin             # Validation successful
+```

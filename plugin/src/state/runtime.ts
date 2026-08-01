@@ -27,8 +27,8 @@ import {
   MUTATION_COMMANDS,
   OrcaCliError,
   runOrca,
-  runOrcaJson,
   type OrcaCliOptions,
+  type OrcaCliResult,
 } from "../orca/cli.js";
 import type { LogicalSession } from "../orca/discovery.js";
 import { refreshDiscovery, type DiscoveryRefreshOptions } from "../orca/refresh.js";
@@ -77,8 +77,13 @@ export type DashboardRuntimeDeps = {
   refresh?: typeof refreshDiscovery;
   /** Injected focus runner for tests. */
   runFocus?: (handle: string, cli: OrcaCliOptions) => Promise<void>;
-  /** Injected mutation runner (preset/interrupt/close/draft) for tests. */
+  /** Injected mutation runner (preset/interrupt/close) for tests. */
   runMutation?: MutationRunner;
+  /**
+   * Injected draft CLI runner for tests. Must return full OrcaCliResult so
+   * exitCode/envelope can be confirmed — void runners must not be used for draft.
+   */
+  runDraftCli?: (args: readonly string[], cli: OrcaCliOptions) => Promise<OrcaCliResult>;
   /** Optional absolute path to orca-draft-overlay helper. */
   draftHelperPath?: string;
   /** Injected helper spawner for tests. */
@@ -1016,16 +1021,33 @@ export class DashboardRuntime {
     }
     const handle = session.runtimeHandle;
     const args = ["terminal", "send", "--terminal", handle, "--text", input.draft, "--enter"];
-    // Never terminal switch/focus.
+    // Never terminal switch/focus. Inspect full CLI result — never treat discarded void as success.
     try {
-      await this.runMutationArgs(args);
-      this.deps.logger.info(
-        "draft_sent",
-        { chars: input.draft.length },
-        { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
-      );
-      await this.refresh();
-      return { kind: "success" };
+      const result = await this.runDraftCli(args);
+      const outcome = confirmDraftCliOutcome(result, "Send failed");
+      if (outcome.kind === "success") {
+        this.deps.logger.info(
+          "draft_sent",
+          { chars: input.draft.length, exitCode: result.exitCode ?? -1 },
+          { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
+        );
+        await this.refresh();
+        return outcome;
+      }
+      if (outcome.kind === "ambiguous") {
+        this.deps.logger.error(
+          "draft_send_ambiguous",
+          { code: outcome.code },
+          { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
+        );
+      } else {
+        this.deps.logger.error(
+          "draft_send_failed",
+          { code: outcome.code, exitCode: result.exitCode ?? -1 },
+          { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
+        );
+      }
+      return outcome;
     } catch (err) {
       const code = err instanceof OrcaCliError ? err.code : "error";
       if (code === "timeout" || code === "invalid_json" || code === "empty_stdout") {
@@ -1048,7 +1070,7 @@ export class DashboardRuntime {
       return {
         kind: "failed",
         code,
-        message: code === "non_zero_exit" ? "Send failed" : "Send failed",
+        message: "Send failed",
       };
     }
   }
@@ -1082,26 +1104,37 @@ export class DashboardRuntime {
       };
     }
     // Exactly one worktree create; never --activate.
+    // Confirm exitCode===0 AND envelope ok!==false before success.
     try {
-      if (this.deps.runMutation) {
-        await this.deps.runMutation(args, this.cliOpts());
-      } else {
-        const result = await runOrcaJson(args, this.cliOpts());
-        if (!result || (result as { json?: { ok?: boolean } }).json?.ok === false) {
-          return {
-            kind: "failed",
-            code: "non_zero_exit",
-            message: "Worktree create failed",
-          };
-        }
+      const result = await this.runDraftCli(args);
+      const outcome = confirmDraftCliOutcome(result, "Worktree create failed");
+      if (outcome.kind === "success") {
+        this.deps.logger.info(
+          "draft_launch_ok",
+          { provider: input.provider, exitCode: result.exitCode ?? -1 },
+          { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
+        );
+        await this.refresh();
+        return outcome;
       }
-      this.deps.logger.info(
-        "draft_launch_ok",
-        { provider: input.provider },
-        { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
-      );
-      await this.refresh();
-      return { kind: "success" };
+      if (outcome.kind === "ambiguous") {
+        this.deps.logger.error(
+          "draft_launch_ambiguous",
+          { code: outcome.code, provider: input.provider },
+          { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
+        );
+      } else {
+        this.deps.logger.error(
+          "draft_launch_failed",
+          {
+            code: outcome.code,
+            provider: input.provider,
+            exitCode: result.exitCode ?? -1,
+          },
+          { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
+        );
+      }
+      return outcome;
     } catch (err) {
       const code = err instanceof OrcaCliError ? err.code : "error";
       if (code === "timeout" || code === "invalid_json" || code === "empty_stdout") {
@@ -1127,6 +1160,14 @@ export class DashboardRuntime {
         message: "Worktree create failed",
       };
     }
+  }
+
+  /** Draft mutations must observe OrcaCliResult; never discard via void runner. */
+  private async runDraftCli(args: readonly string[]): Promise<OrcaCliResult> {
+    if (this.deps.runDraftCli) {
+      return this.deps.runDraftCli(args, this.cliOpts());
+    }
+    return runOrca(args, this.cliOpts());
   }
 
   private async flashControls(kind: RuntimeControlKind, ok: boolean): Promise<void> {
@@ -1155,6 +1196,65 @@ export class DashboardRuntime {
     }
     await Promise.all(writes);
   }
+}
+
+
+/**
+ * Confirmed draft mutation outcome from a retained OrcaCliResult.
+ * Success only when exitCode===0 and parsed envelope is not ok:false.
+ * Nonzero (including stdout JSON) and ok:false => failed (preserve draft).
+ * timeout/invalid_json/empty_stdout => ambiguous.
+ */
+export function confirmDraftCliOutcome(
+  result: OrcaCliResult,
+  failedMessage: string,
+): DraftMutationOutcome {
+  if (result.timedOut) {
+    return {
+      kind: "ambiguous",
+      code: "timeout",
+      message: "Outcome unknown — Focus required",
+    };
+  }
+  if (result.exitCode !== 0) {
+    return {
+      kind: "failed",
+      code: "non_zero_exit",
+      message: failedMessage,
+    };
+  }
+  const trimmed = result.stdout.trim();
+  if (trimmed.length === 0) {
+    return {
+      kind: "ambiguous",
+      code: "empty_stdout",
+      message: "Outcome unknown — Focus required",
+    };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed) as unknown;
+  } catch {
+    return {
+      kind: "ambiguous",
+      code: "invalid_json",
+      message: "Outcome unknown — Focus required",
+    };
+  }
+  if (
+    typeof parsed === "object" &&
+    parsed !== null &&
+    !Array.isArray(parsed) &&
+    "ok" in parsed &&
+    (parsed as { ok?: unknown }).ok === false
+  ) {
+    return {
+      kind: "failed",
+      code: "envelope_not_ok",
+      message: failedMessage,
+    };
+  }
+  return { kind: "success" };
 }
 
 function presetKind(index: PresetIndex): SafeControlKind {
