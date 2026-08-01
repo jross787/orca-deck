@@ -20,7 +20,7 @@
       "const": 1
     },
     "orcaExecutable": {
-      "type": "string",
+      "type": ["string", "null"],
       "minLength": 1
     },
     "polling": {

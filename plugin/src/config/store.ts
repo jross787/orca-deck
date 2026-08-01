@@ -150,7 +150,8 @@ export function validateConfig(input: unknown): ConfigValidationResult {
   }
 
   let orcaExecutable: string | undefined;
-  if (input.orcaExecutable !== undefined) {
+  // null = explicit unset (PATH default); omit = leave for validate of full docs only.
+  if (input.orcaExecutable !== undefined && input.orcaExecutable !== null) {
     if (typeof input.orcaExecutable !== "string" || input.orcaExecutable.trim().length === 0) {
       issues.push(issue("orcaExecutable", "must be a non-empty string when set"));
     } else {
@@ -285,14 +286,22 @@ export function mergeConfigPatch(
     superwhisper:
       patch.superwhisper === undefined
         ? base.superwhisper
-        : isObject(patch.superwhisper)
-          ? { ...(base.superwhisper ?? {}), ...patch.superwhisper }
-          : patch.superwhisper,
+        : patch.superwhisper === null
+          ? undefined
+          : isObject(patch.superwhisper)
+            ? { ...(base.superwhisper ?? {}), ...patch.superwhisper }
+            : patch.superwhisper,
   };
-  // Drop undefined optional keys introduced by spread.
-  if (merged.orcaExecutable === undefined) delete merged.orcaExecutable;
-  if (merged.superwhisper === undefined) delete merged.superwhisper;
-  if (merged.remoteHostFilters === undefined) delete merged.remoteHostFilters;
+  // Explicit null unsets optional keys (PI clear → PATH default).
+  if (patch.orcaExecutable === null || merged.orcaExecutable === undefined) {
+    delete merged.orcaExecutable;
+  }
+  if (patch.superwhisper === null || merged.superwhisper === undefined) {
+    delete merged.superwhisper;
+  }
+  if (patch.remoteHostFilters === null || merged.remoteHostFilters === undefined) {
+    delete merged.remoteHostFilters;
+  }
   return validateConfig(merged);
 }
 

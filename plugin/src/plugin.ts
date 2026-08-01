@@ -92,13 +92,13 @@ streamDeck.ui.onSendToPlugin(async (ev) => {
     }
 
     if (req.type === "health.refresh") {
-      const health = await healthAction.refreshHealth();
+      // One CLI round: refreshAndPaint returns the snapshot used for paint + PI.
+      const health = await healthAction.refreshAndPaint();
       await sendPi({
         type: "health.snapshot",
         requestId: req.requestId,
         health,
       });
-      await healthAction.refreshAndPaint();
       return;
     }
   } catch (err) {

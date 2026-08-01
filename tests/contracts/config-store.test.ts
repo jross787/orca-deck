@@ -90,6 +90,23 @@ describe("config store atomic save and last-valid", () => {
     assert.equal(again.config.holdToCloseMs, 1800);
   });
 
+  it("null orcaExecutable patch clears override back to PATH default", async () => {
+    const { store, configPath } = await tempStore();
+    await store.load();
+    await store.patch({ orcaExecutable: "/custom/orca" });
+    assert.equal(store.getConfig().orcaExecutable, "/custom/orca");
+
+    const cleared = await store.patch({ orcaExecutable: null });
+    assert.equal("orcaExecutable" in cleared.config, false);
+    assert.equal(cleared.config.orcaExecutable, undefined);
+
+    const disk = JSON.parse(await readFile(configPath, "utf8")) as Record<string, unknown>;
+    assert.equal("orcaExecutable" in disk, false);
+
+    // Empty-string remains invalid; only null is the unset signal.
+    await assert.rejects(() => store.patch({ orcaExecutable: "" }), /invalid config patch/);
+  });
+
   it("retains last valid snapshot on invalid external change", async () => {
     const { store, configPath } = await tempStore();
     await store.load();

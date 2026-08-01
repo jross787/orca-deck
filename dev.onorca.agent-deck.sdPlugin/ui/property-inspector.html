@@ -392,11 +392,13 @@
       els.saveBtn.addEventListener("click", () => {
         const cliTimeoutMs = Number(els.cliTimeoutMs.value);
         const holdToCloseMs = Number(els.holdToCloseMs.value);
+        const executable = els.orcaExecutable.value.trim();
         setStatus("Saving config…");
         send({
           type: "config.patch",
           patch: {
-            orcaExecutable: els.orcaExecutable.value.trim() || undefined,
+            // null unsets override so CLI falls back to PATH "orca".
+            orcaExecutable: executable.length > 0 ? executable : null,
             cliTimeoutMs,
             holdToCloseMs,
           },

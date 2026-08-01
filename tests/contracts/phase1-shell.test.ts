@@ -3,13 +3,18 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { HealthAction } from "../../plugin/src/actions/health.js";
+import { ConfigStore, defaultConfig } from "../../plugin/src/config/store.js";
 import {
   assertSafeDiagnosticEvent,
   commandNameFromArgs,
   RedactedLogger,
   type DiagnosticEvent,
 } from "../../plugin/src/diagnostics/logger.js";
-import { mapHealthSnapshot } from "../../plugin/src/health/check.js";
+import {
+  mapHealthSnapshot,
+  type HealthSnapshot,
+} from "../../plugin/src/health/check.js";
 import {
   parsePiRequest,
   responseMatchesRequest,
@@ -20,10 +25,8 @@ import {
   ImageWriteDebouncer,
   renderHealthSvg,
 } from "../../plugin/src/rendering/health-svg.js";
-import { defaultConfig } from "../../plugin/src/config/store.js";
 import { SCHEMA_VERSION } from "../../plugin/src/orca/schema.js";
 import { buildCapabilityInspection, type CommandSpec } from "../../plugin/src/orca/capabilities.js";
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "../..");
 const BUNDLE = path.join(ROOT, "dev.onorca.agent-deck.sdPlugin");
@@ -158,6 +161,45 @@ describe("health mapping ready/unavailable/incompatible", () => {
     assert.ok(snap.configError);
   });
 });
+
+describe("health refresh single CLI round", () => {
+  it("refreshAndPaint invokes checkHealth once for PI response+paint", async () => {
+    let rounds = 0;
+    const snapshot: HealthSnapshot = {
+      state: "ready",
+      detail: "ok",
+      checkedAt: "2026-08-01T00:00:00.000Z",
+      schemaVersion: SCHEMA_VERSION,
+      checks: [],
+    };
+    const store = new ConfigStore({
+      paths: {
+        supportDir: "/tmp/orca-deck-unused",
+        configPath: "/tmp/orca-deck-unused/config.json",
+        statePath: "/tmp/orca-deck-unused/state.json",
+        logsDir: "/tmp/orca-deck-unused-logs",
+        logPath: "/tmp/orca-deck-unused-logs/plugin.log",
+      },
+      watch: false,
+    });
+    const action = new HealthAction({
+      configStore: store,
+      logger: new RedactedLogger({ sink: () => undefined }),
+      checkHealth: async () => {
+        rounds += 1;
+        return snapshot;
+      },
+    });
+
+    // Mirrors plugin.ts health.refresh: one refreshAndPaint supplies PI + paint.
+    const health = await action.refreshAndPaint();
+    assert.equal(rounds, 1);
+    assert.equal(health.state, "ready");
+    assert.equal(action.getLastHealth()?.state, "ready");
+    action.stopPolling();
+  });
+});
+
 
 describe("log redaction", () => {
   it("accepts metadata-only events and rejects content keys", async () => {
