@@ -1,0 +1,181 @@
+{
+  "meta": {
+    "schemaVersion": "orca-cli-json/1.4.159",
+    "provenance": "synthetic",
+    "scenario": "local-omp-states",
+    "capturedAt": "2026-08-01T00:00:00.000Z",
+    "orcaAppVersion": "1.4.159",
+    "notes": [
+      "Synthetic redacted bundle covering local OMP working/done/waiting/error.",
+      "Not observed from a live capture on this machine."
+    ],
+    "redaction": {
+      "strippedFields": [
+        "prompt",
+        "lastAssistantMessage",
+        "toolInput",
+        "preview",
+        "title",
+        "path",
+        "worktreePath",
+        "handle",
+        "ptyId",
+        "comment"
+      ],
+      "pathPolicy": "absolute paths replaced with pathPlaceholder derived from worktreeId",
+      "handlePolicy": "live runtime handles replaced with handlePlaceholder; never restore as command targets from fixtures"
+    }
+  },
+  "status": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "app": { "running": true, "desktopWindowStatus": "visible" },
+      "runtime": {
+        "state": "ready",
+        "reachable": true,
+        "runtimeId": "rt_synth_local",
+        "appVersion": "1.4.159",
+        "capabilities": ["terminal.query-reply-input.v1", "worktree.ps.v1"]
+      },
+      "graph": { "state": "ready" }
+    }
+  },
+  "worktreePs": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "totalCount": 1,
+      "truncated": false,
+      "worktrees": [
+        {
+          "workspaceKind": "git",
+          "worktreeId": "demo-repo::main",
+          "repoId": "repo_demo",
+          "hostId": "local",
+          "terminalPlatform": "mac",
+          "repo": "demo-repo",
+          "pathPlaceholder": "<redacted-path:demo-repo#0>",
+          "branch": "main",
+          "isArchived": false,
+          "isMainWorktree": true,
+          "worktreeInstanceId": "wti_omp_states",
+          "displayName": "demo-main",
+          "workspaceStatus": "ready",
+          "isActive": true,
+          "unread": true,
+          "liveTerminalCount": 4,
+          "hasAttachedPty": true,
+          "lastOutputAt": 1754000004000,
+          "status": "active",
+          "agents": [
+            {
+              "paneKey": "tab_a:leaf_w",
+              "parentPaneKey": null,
+              "state": "working",
+              "agentType": "omp",
+              "toolName": "Read",
+              "interrupted": false,
+              "stateStartedAt": 1754000001000,
+              "updatedAt": 1754000001500,
+              "hasPrompt": false,
+              "hasToolInput": true
+            },
+            {
+              "paneKey": "tab_a:leaf_d",
+              "parentPaneKey": null,
+              "state": "done",
+              "agentType": "omp",
+              "toolName": null,
+              "interrupted": false,
+              "stateStartedAt": 1754000002000,
+              "updatedAt": 1754000002500,
+              "hasPrompt": false,
+              "hasToolInput": false
+            },
+            {
+              "paneKey": "tab_a:leaf_v",
+              "parentPaneKey": null,
+              "state": "waiting",
+              "agentType": "omp",
+              "toolName": null,
+              "interrupted": false,
+              "stateStartedAt": 1754000003000,
+              "updatedAt": 1754000003500,
+              "hasPrompt": true,
+              "hasToolInput": false
+            },
+            {
+              "paneKey": "tab_a:leaf_e",
+              "parentPaneKey": null,
+              "state": "error",
+              "agentType": "omp",
+              "toolName": null,
+              "interrupted": true,
+              "stateStartedAt": 1754000004000,
+              "updatedAt": 1754000004500,
+              "hasPrompt": false,
+              "hasToolInput": false
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "terminalList": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "terminals": [
+        {
+          "handlePlaceholder": "<redacted-handle:0>",
+          "incarnationId": "inc_0",
+          "orphaned": false,
+          "worktreeId": "demo-repo::main",
+          "tabId": "tab_a",
+          "leafId": "leaf_w",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000001500,
+          "hasTitle": true
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:1>",
+          "incarnationId": "inc_1",
+          "orphaned": false,
+          "worktreeId": "demo-repo::main",
+          "tabId": "tab_a",
+          "leafId": "leaf_d",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000002500,
+          "hasTitle": true
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:2>",
+          "incarnationId": "inc_2",
+          "orphaned": false,
+          "worktreeId": "demo-repo::main",
+          "tabId": "tab_a",
+          "leafId": "leaf_v",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000003500,
+          "hasTitle": true
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:3>",
+          "incarnationId": "inc_3",
+          "orphaned": false,
+          "worktreeId": "demo-repo::main",
+          "tabId": "tab_a",
+          "leafId": "leaf_e",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000004500,
+          "hasTitle": false
+        }
+      ]
+    }
+  }
+}

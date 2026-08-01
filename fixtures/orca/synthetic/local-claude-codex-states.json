@@ -1,0 +1,246 @@
+{
+  "meta": {
+    "schemaVersion": "orca-cli-json/1.4.159",
+    "provenance": "synthetic",
+    "scenario": "local-claude-codex-states",
+    "capturedAt": "2026-08-01T00:00:00.000Z",
+    "orcaAppVersion": "1.4.159",
+    "notes": [
+      "Synthetic redacted bundle covering local Claude Code waiting/done/error and Codex waiting/done/error.",
+      "Not observed from a live capture on this machine."
+    ],
+    "redaction": {
+      "strippedFields": [
+        "prompt",
+        "lastAssistantMessage",
+        "toolInput",
+        "preview",
+        "title",
+        "path",
+        "worktreePath",
+        "handle",
+        "ptyId",
+        "comment"
+      ],
+      "pathPolicy": "absolute paths replaced with pathPlaceholder derived from worktreeId",
+      "handlePolicy": "live runtime handles replaced with handlePlaceholder; never restore as command targets from fixtures"
+    }
+  },
+  "status": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "app": { "running": true, "desktopWindowStatus": "visible" },
+      "runtime": {
+        "state": "ready",
+        "reachable": true,
+        "runtimeId": "rt_synth_local",
+        "appVersion": "1.4.159",
+        "capabilities": ["terminal.query-reply-input.v1"]
+      },
+      "graph": { "state": "ready" }
+    }
+  },
+  "worktreePs": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "totalCount": 2,
+      "truncated": false,
+      "worktrees": [
+        {
+          "workspaceKind": "git",
+          "worktreeId": "claude-repo::feature",
+          "repoId": "repo_claude",
+          "hostId": "local",
+          "terminalPlatform": "mac",
+          "repo": "claude-repo",
+          "pathPlaceholder": "<redacted-path:claude-repo#0>",
+          "branch": "feature",
+          "isMainWorktree": false,
+          "displayName": "claude-feature",
+          "isActive": true,
+          "unread": true,
+          "liveTerminalCount": 3,
+          "hasAttachedPty": true,
+          "lastOutputAt": 1754000103000,
+          "status": "active",
+          "agents": [
+            {
+              "paneKey": "tab_c:leaf_wait",
+              "parentPaneKey": null,
+              "state": "waiting",
+              "agentType": "claude",
+              "toolName": null,
+              "interrupted": false,
+              "stateStartedAt": 1754000101000,
+              "updatedAt": 1754000101100,
+              "hasPrompt": true,
+              "hasToolInput": false
+            },
+            {
+              "paneKey": "tab_c:leaf_done",
+              "parentPaneKey": null,
+              "state": "done",
+              "agentType": "claude",
+              "toolName": null,
+              "interrupted": false,
+              "stateStartedAt": 1754000102000,
+              "updatedAt": 1754000102100,
+              "hasPrompt": false,
+              "hasToolInput": false
+            },
+            {
+              "paneKey": "tab_c:leaf_err",
+              "parentPaneKey": null,
+              "state": "error",
+              "agentType": "claude",
+              "toolName": "Bash",
+              "interrupted": false,
+              "stateStartedAt": 1754000103000,
+              "updatedAt": 1754000103100,
+              "hasPrompt": false,
+              "hasToolInput": true
+            }
+          ]
+        },
+        {
+          "workspaceKind": "git",
+          "worktreeId": "codex-repo::main",
+          "repoId": "repo_codex",
+          "hostId": "local",
+          "terminalPlatform": "mac",
+          "repo": "codex-repo",
+          "pathPlaceholder": "<redacted-path:codex-repo#1>",
+          "branch": "main",
+          "isMainWorktree": true,
+          "displayName": "codex-main",
+          "isActive": true,
+          "unread": false,
+          "liveTerminalCount": 3,
+          "hasAttachedPty": true,
+          "lastOutputAt": 1754000203000,
+          "status": "active",
+          "agents": [
+            {
+              "paneKey": "tab_x:leaf_wait",
+              "parentPaneKey": null,
+              "state": "waiting",
+              "agentType": "codex",
+              "toolName": null,
+              "interrupted": false,
+              "stateStartedAt": 1754000201000,
+              "updatedAt": 1754000201100,
+              "hasPrompt": true,
+              "hasToolInput": false
+            },
+            {
+              "paneKey": "tab_x:leaf_done",
+              "parentPaneKey": null,
+              "state": "done",
+              "agentType": "codex",
+              "toolName": null,
+              "interrupted": false,
+              "stateStartedAt": 1754000202000,
+              "updatedAt": 1754000202100,
+              "hasPrompt": false,
+              "hasToolInput": false
+            },
+            {
+              "paneKey": "tab_x:leaf_err",
+              "parentPaneKey": null,
+              "state": "error",
+              "agentType": "codex",
+              "toolName": null,
+              "interrupted": true,
+              "stateStartedAt": 1754000203000,
+              "updatedAt": 1754000203100,
+              "hasPrompt": false,
+              "hasToolInput": false
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "terminalList": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "terminals": [
+        {
+          "handlePlaceholder": "<redacted-handle:0>",
+          "incarnationId": "inc_c0",
+          "orphaned": false,
+          "worktreeId": "claude-repo::feature",
+          "tabId": "tab_c",
+          "leafId": "leaf_wait",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000101100,
+          "hasTitle": true
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:1>",
+          "incarnationId": "inc_c1",
+          "orphaned": false,
+          "worktreeId": "claude-repo::feature",
+          "tabId": "tab_c",
+          "leafId": "leaf_done",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000102100,
+          "hasTitle": true
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:2>",
+          "incarnationId": "inc_c2",
+          "orphaned": false,
+          "worktreeId": "claude-repo::feature",
+          "tabId": "tab_c",
+          "leafId": "leaf_err",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000103100,
+          "hasTitle": true
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:3>",
+          "incarnationId": "inc_x0",
+          "orphaned": false,
+          "worktreeId": "codex-repo::main",
+          "tabId": "tab_x",
+          "leafId": "leaf_wait",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000201100,
+          "hasTitle": true
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:4>",
+          "incarnationId": "inc_x1",
+          "orphaned": false,
+          "worktreeId": "codex-repo::main",
+          "tabId": "tab_x",
+          "leafId": "leaf_done",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000202100,
+          "hasTitle": true
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:5>",
+          "incarnationId": "inc_x2",
+          "orphaned": false,
+          "worktreeId": "codex-repo::main",
+          "tabId": "tab_x",
+          "leafId": "leaf_err",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000203100,
+          "hasTitle": false
+        }
+      ]
+    }
+  }
+}
