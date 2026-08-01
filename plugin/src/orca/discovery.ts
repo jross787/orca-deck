@@ -31,6 +31,7 @@ export type LogicalSession = {
   logicalSessionId: string;
   worktreeId: string;
   paneKey: string;
+  parentPaneKey?: string | null;
   hostId: string;
   repo?: string;
   displayName?: string;
@@ -49,7 +50,10 @@ export type LogicalSession = {
   writable: boolean;
   joinHealth: JoinHealth;
   ambiguousHandleCount?: number;
+  /** Slot-consuming agents in the same worktree (excludes OMP children). */
   trackedAgentCountInWorktree: number;
+  /** Contextual OMP child agent count aggregated onto the parent; children never take slots. */
+  ompChildCount: number;
 };
 
 export type DiscoverySnapshot = {
@@ -84,6 +88,10 @@ function indexTerminals(terminals: readonly OrcaTerminalRecord[]): Map<string, O
   return byWorktreePane;
 }
 
+function isOmpChildAgent(parentPaneKey: string | null | undefined): boolean {
+  return typeof parentPaneKey === "string" && parentPaneKey.length > 0;
+}
+
 export function joinDiscovery(input: JoinInput): DiscoverySnapshot {
   const nowMs = input.nowMs ?? Date.now();
   const issues: string[] = [];
@@ -98,13 +106,25 @@ export function joinDiscovery(input: JoinInput): DiscoverySnapshot {
   const terminals = input.terminalList.terminals ?? [];
   const byWorktreePane = indexTerminals(terminals);
 
-  const agentCounts = new Map<string, number>();
-  for (const wt of worktrees) agentCounts.set(wt.worktreeId, (wt.agents ?? []).length);
-
+  // Slot-consuming agents only (OMP children with parentPaneKey are excluded).
+  const trackedCounts = new Map<string, number>();
+  const childCounts = new Map<string, number>(); // key: worktreeId\0parentPaneKey
   const agentPaneKeys = new Set<string>();
+
   for (const wt of worktrees) {
-    for (const a of wt.agents ?? []) agentPaneKeys.add(`${wt.worktreeId}\0${a.paneKey}`);
+    let tracked = 0;
+    for (const a of wt.agents ?? []) {
+      agentPaneKeys.add(`${wt.worktreeId}\0${a.paneKey}`);
+      if (isOmpChildAgent(a.parentPaneKey)) {
+        const ck = `${wt.worktreeId}\0${a.parentPaneKey}`;
+        childCounts.set(ck, (childCounts.get(ck) ?? 0) + 1);
+      } else {
+        tracked += 1;
+      }
+    }
+    trackedCounts.set(wt.worktreeId, tracked);
   }
+
   let ignoredShellCount = 0;
   for (const t of terminals) {
     const pk = paneKeyFromTerminal(t.tabId, t.leafId);
@@ -115,15 +135,20 @@ export function joinDiscovery(input: JoinInput): DiscoverySnapshot {
   let ambiguousCount = 0;
 
   for (const wt of worktrees) {
-    const trackedAgentCountInWorktree = agentCounts.get(wt.worktreeId) ?? 0;
+    const trackedAgentCountInWorktree = trackedCounts.get(wt.worktreeId) ?? 0;
     for (const agent of wt.agents ?? []) {
+      // OMP children never consume dashboard slots.
+      if (isOmpChildAgent(agent.parentPaneKey)) continue;
+
       const logicalSessionId = makeLogicalSessionId(wt.worktreeId, agent.paneKey);
       const joinKey = `${wt.worktreeId}\0${agent.paneKey}`;
       const matches = byWorktreePane.get(joinKey) ?? [];
+      const ompChildCount = childCounts.get(`${wt.worktreeId}\0${agent.paneKey}`) ?? 0;
       const base = {
         logicalSessionId,
         worktreeId: wt.worktreeId,
         paneKey: agent.paneKey,
+        parentPaneKey: agent.parentPaneKey ?? null,
         hostId: wt.hostId ?? "local",
         repo: wt.repo,
         displayName: wt.displayName,
@@ -136,6 +161,7 @@ export function joinDiscovery(input: JoinInput): DiscoverySnapshot {
         updatedAt: agent.updatedAt ?? null,
         toolName: agent.toolName ?? null,
         trackedAgentCountInWorktree,
+        ompChildCount,
       };
 
       if (matches.length === 0) {

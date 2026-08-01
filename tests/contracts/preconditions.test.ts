@@ -32,6 +32,7 @@ function session(over: Partial<LogicalSession> = {}): LogicalSession {
     writable: true,
     joinHealth: "ok",
     trackedAgentCountInWorktree: 1,
+    ompChildCount: 0,
     ...over,
   };
 }

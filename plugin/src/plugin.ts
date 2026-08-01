@@ -1,12 +1,20 @@
 /**
  * Orca Agent Deck — Stream Deck SDK v2 plugin entry.
  * Register actions before connect. Keep SDK logger at info or quieter.
+ * One shared DashboardRuntime serves all session + control keys.
  */
 import streamDeck from "@elgato/streamdeck";
+import {
+  AcknowledgeAction,
+  FocusAction,
+  NextAttentionAction,
+} from "./actions/controls.js";
 import { HealthAction } from "./actions/health.js";
+import { createSessionActions } from "./actions/session.js";
 import { ConfigStore } from "./config/store.js";
 import { RedactedLogger } from "./diagnostics/logger.js";
 import { parsePiRequest, type PiResponse } from "./messaging/protocol.js";
+import { DashboardRuntime } from "./state/runtime.js";
 
 // Do NOT enable SDK trace logging — it can record raw protocol messages.
 streamDeck.logger.setLevel("info");
@@ -22,6 +30,11 @@ const configStore = new ConfigStore({
 });
 
 const healthAction = new HealthAction({ configStore, logger });
+const dashboardRuntime = new DashboardRuntime({ configStore, logger });
+const sessionActions = createSessionActions({ runtime: dashboardRuntime });
+const nextAttentionAction = new NextAttentionAction({ runtime: dashboardRuntime });
+const focusAction = new FocusAction({ runtime: dashboardRuntime });
+const acknowledgeAction = new AcknowledgeAction({ runtime: dashboardRuntime });
 
 async function sendPi(response: PiResponse): Promise<void> {
   try {
@@ -34,6 +47,7 @@ async function sendPi(response: PiResponse): Promise<void> {
 async function bootstrap(): Promise<void> {
   await configStore.load();
   configStore.startWatching();
+  await dashboardRuntime.whenReady();
   logger.info("plugin_start", {
     schemaVersion: configStore.getConfig().schemaVersion,
   });
@@ -88,6 +102,7 @@ streamDeck.ui.onSendToPlugin(async (ev) => {
         source: snap.source,
       });
       void healthAction.refreshAndPaint();
+      void dashboardRuntime.refresh();
       return;
     }
 
@@ -115,6 +130,12 @@ streamDeck.ui.onSendToPlugin(async (ev) => {
 
 // Register actions before connecting.
 streamDeck.actions.registerAction(healthAction);
+for (const sessionAction of sessionActions) {
+  streamDeck.actions.registerAction(sessionAction);
+}
+streamDeck.actions.registerAction(nextAttentionAction);
+streamDeck.actions.registerAction(focusAction);
+streamDeck.actions.registerAction(acknowledgeAction);
 
 void bootstrap()
   .catch((err) => {
