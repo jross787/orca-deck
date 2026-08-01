@@ -8,6 +8,7 @@ import { evaluateRetrySupport } from "./retry.js";
 export type MutationKind =
   | "focus"
   | "preset_send"
+  | "draft_send"
   | "interrupt"
   | "close"
   | "retry"
@@ -63,7 +64,7 @@ export function checkMutationPreconditions(input: {
     }
   }
 
-  if (input.kind === "preset_send") {
+  if (input.kind === "preset_send" || input.kind === "draft_send") {
     if (typeof input.presetText !== "string" || input.presetText.length === 0) {
       return { ok: false, code: "empty_preset", message: "Preset text is empty." };
     }

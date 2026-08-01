@@ -6,7 +6,7 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   ACKNOWLEDGE_UUID,
-  DRAFT_PLACEHOLDER_UUID,
+  DRAFT_UUID,
   FOCUS_UUID,
   INTERRUPT_CLOSE_UUID,
   NEXT_ATTENTION_UUID,
@@ -855,18 +855,19 @@ describe("manifest Phase 3 layout and assets", () => {
     assert.ok(uuids.includes(PRESET_4_UUID));
     assert.ok(uuids.includes(RETRY_UUID));
     assert.ok(uuids.includes(STRUCTURED_REPLY_UUID));
-    assert.ok(uuids.includes(DRAFT_PLACEHOLDER_UUID));
+    assert.ok(uuids.includes(DRAFT_UUID));
     assert.equal(SESSION_ACTION_UUIDS.length, SLOT_COUNT);
-    assert.equal(SAFE_CONTROL_UUIDS.length, 8);
+    assert.equal(SAFE_CONTROL_UUIDS.length, 13);
     const iAck = uuids.indexOf(ACKNOWLEDGE_UUID);
     assert.equal(uuids[iAck + 1], INTERRUPT_CLOSE_UUID);
     assert.equal(uuids[iAck + 2], PRESET_1_UUID);
     assert.equal(uuids[iAck + 3], PRESET_2_UUID);
     assert.equal(uuids[iAck + 4], PRESET_3_UUID);
-    assert.equal(uuids[iAck + 5], DRAFT_PLACEHOLDER_UUID);
-    assert.equal(uuids[iAck + 6], PRESET_4_UUID);
-    assert.equal(uuids[iAck + 7], RETRY_UUID);
-    assert.equal(uuids[iAck + 8], STRUCTURED_REPLY_UUID);
+    assert.equal(uuids[iAck + 5], DRAFT_UUID);
+    assert.ok(uuids.includes(PRESET_4_UUID));
+    assert.ok(uuids.includes(RETRY_UUID));
+    assert.ok(uuids.includes(STRUCTURED_REPLY_UUID));
+    assert.ok(uuids.indexOf(PRESET_4_UUID) > uuids.indexOf(DRAFT_UUID));
     for (const a of manifest.Actions) {
       assert.deepEqual(a.Controllers, ["Keypad"]);
       assert.equal(a.Icon.endsWith(".png"), false);
@@ -881,7 +882,7 @@ describe("manifest Phase 3 layout and assets", () => {
       "imgs/actions/preset-4/key.png",
       "imgs/actions/retry/key.png",
       "imgs/actions/structured-reply/key.png",
-      "imgs/actions/draft-placeholder/key.png",
+      "imgs/actions/draft/key.png",
     ]) {
       const buf = await readFile(path.join(BUNDLE, rel));
       assert.ok(buf.byteLength > 0, rel);

@@ -1,6 +1,6 @@
 {
   "Name": "Orca Agent Deck",
-  "Version": "0.3.0.0",
+  "Version": "0.4.0.0",
   "Author": "Orca Deck",
   "Actions": [
     {
@@ -9,7 +9,9 @@
       "Icon": "imgs/actions/health/icon",
       "Tooltip": "Shows Orca runtime health for Agent Deck setup.",
       "PropertyInspectorPath": "ui/property-inspector.html",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
       "States": [
         {
@@ -24,249 +26,550 @@
       "UUID": "dev.onorca.agent-deck.session-01",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 01. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 02",
       "UUID": "dev.onorca.agent-deck.session-02",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 02. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 03",
       "UUID": "dev.onorca.agent-deck.session-03",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 03. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 04",
       "UUID": "dev.onorca.agent-deck.session-04",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 04. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 05",
       "UUID": "dev.onorca.agent-deck.session-05",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 05. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 06",
       "UUID": "dev.onorca.agent-deck.session-06",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 06. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 07",
       "UUID": "dev.onorca.agent-deck.session-07",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 07. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 08",
       "UUID": "dev.onorca.agent-deck.session-08",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 08. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 09",
       "UUID": "dev.onorca.agent-deck.session-09",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 09. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 10",
       "UUID": "dev.onorca.agent-deck.session-10",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 10. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 11",
       "UUID": "dev.onorca.agent-deck.session-11",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 11. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 12",
       "UUID": "dev.onorca.agent-deck.session-12",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 12. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 13",
       "UUID": "dev.onorca.agent-deck.session-13",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 13. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 14",
       "UUID": "dev.onorca.agent-deck.session-14",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 14. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 15",
       "UUID": "dev.onorca.agent-deck.session-15",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 15. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Session 16",
       "UUID": "dev.onorca.agent-deck.session-16",
       "Icon": "imgs/actions/session/icon",
       "Tooltip": "Agent session slot 16. Press to select.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/session/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/session/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Next Attention",
       "UUID": "dev.onorca.agent-deck.next-attention",
       "Icon": "imgs/actions/next-attention/icon",
       "Tooltip": "Select the highest-ranked attention target without moving cards.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/next-attention/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/next-attention/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Focus",
       "UUID": "dev.onorca.agent-deck.focus",
       "Icon": "imgs/actions/focus/icon",
       "Tooltip": "Focus the selected agent terminal via refreshed runtime handle.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/focus/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/focus/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Acknowledge",
       "UUID": "dev.onorca.agent-deck.acknowledge",
       "Icon": "imgs/actions/acknowledge/icon",
       "Tooltip": "Acknowledge the selected card's local unread event.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/acknowledge/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/acknowledge/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Interrupt / Hold Close",
       "UUID": "dev.onorca.agent-deck.interrupt-close",
       "Icon": "imgs/actions/interrupt-close/icon",
       "Tooltip": "Short press interrupts; hold closes the selected terminal after refresh/rejoin.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/interrupt-close/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/interrupt-close/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Finish",
       "UUID": "dev.onorca.agent-deck.preset-1",
       "Icon": "imgs/actions/preset-1/icon",
       "Tooltip": "Send provider Finish preset to the selected fresh writable terminal.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/preset-1/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/preset-1/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Checks",
       "UUID": "dev.onorca.agent-deck.preset-2",
       "Icon": "imgs/actions/preset-2/icon",
       "Tooltip": "Send provider Checks preset to the selected fresh writable terminal.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/preset-2/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/preset-2/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Review",
       "UUID": "dev.onorca.agent-deck.preset-3",
       "Icon": "imgs/actions/preset-3/icon",
       "Tooltip": "Send provider Review preset to the selected fresh writable terminal.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/preset-3/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/preset-3/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Draft",
       "UUID": "dev.onorca.agent-deck.draft",
-      "Icon": "imgs/actions/draft-placeholder/icon",
-      "Tooltip": "Draft overlay placeholder — Phase 4 non-executing.",
-      "Controllers": ["Keypad"],
+      "Icon": "imgs/actions/draft/icon",
+      "Tooltip": "Open or focus the on-demand draft overlay (typed/clipboard/Superwhisper).",
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/draft-placeholder/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/draft/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "Send Draft",
+      "UUID": "dev.onorca.agent-deck.send-draft",
+      "Icon": "imgs/actions/send-draft/icon",
+      "Tooltip": "Focus draft overlay to send reviewed draft to the selected terminal once.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/send-draft/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "Cancel Draft",
+      "UUID": "dev.onorca.agent-deck.cancel-draft",
+      "Icon": "imgs/actions/cancel-draft/icon",
+      "Tooltip": "Close draft overlay without Orca mutation or clipboard changes.",
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/cancel-draft/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "New OMP",
+      "UUID": "dev.onorca.agent-deck.new-omp",
+      "Icon": "imgs/actions/new-omp/icon",
+      "Tooltip": "Launch new OMP worktree from reviewed draft (same project/host).",
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/new-omp/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "New Claude",
+      "UUID": "dev.onorca.agent-deck.new-claude",
+      "Icon": "imgs/actions/new-claude/icon",
+      "Tooltip": "Launch new Claude worktree from reviewed draft (same project/host).",
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/new-claude/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "New Codex",
+      "UUID": "dev.onorca.agent-deck.new-codex",
+      "Icon": "imgs/actions/new-codex/icon",
+      "Tooltip": "Launch new Codex worktree from reviewed draft (same project/host).",
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/new-codex/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Ship",
       "UUID": "dev.onorca.agent-deck.preset-4",
       "Icon": "imgs/actions/preset-4/icon",
       "Tooltip": "Send provider Ship preset to the selected fresh writable terminal.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/preset-4/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/preset-4/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Retry",
       "UUID": "dev.onorca.agent-deck.retry",
       "Icon": "imgs/actions/retry/icon",
       "Tooltip": "Retry when a deterministic public CLI operation exists; otherwise FOCUS REQUIRED.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/retry/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/retry/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     },
     {
       "Name": "Structured Reply",
       "UUID": "dev.onorca.agent-deck.structured-reply",
       "Icon": "imgs/actions/structured-reply/icon",
       "Tooltip": "Structured options fail-closed without typed public prompt/reply contract.",
-      "Controllers": ["Keypad"],
+      "Controllers": [
+        "Keypad"
+      ],
       "UserTitleEnabled": false,
-      "States": [{ "Image": "imgs/actions/structured-reply/key", "TitleAlignment": "middle", "ShowTitle": false }]
+      "States": [
+        {
+          "Image": "imgs/actions/structured-reply/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     }
   ],
   "Category": "Orca Agent Deck",
   "CategoryIcon": "imgs/plugin/category-icon",
   "CodePath": "bin/plugin.js",
-  "Description": "Stream Deck XL deck for Orca agent terminals. Phase 3 adds safe background controls.",
+  "Description": "Stream Deck XL deck for Orca agent terminals. Phase 4 adds draft overlay and agent launch.",
   "Icon": "imgs/plugin/marketplace",
   "SDKVersion": 3,
   "Software": {

@@ -83,6 +83,8 @@ export type OrcaWorktreeRecord = {
   workspaceKind?: string;
   worktreeId: string;
   repoId?: string;
+  projectId?: string;
+  projectHostSetupId?: string;
   hostId?: string;
   terminalPlatform?: string;
   repo?: string;
@@ -325,6 +327,8 @@ const WORKTREE_KNOWN = new Set([
   "workspaceKind",
   "worktreeId",
   "repoId",
+  "projectId",
+  "projectHostSetupId",
   "hostId",
   "terminalPlatform",
   "repo",
@@ -424,6 +428,8 @@ function decodeWorktree(
     worktreeId,
     workspaceKind: asString(raw.workspaceKind),
     repoId: asString(raw.repoId),
+    projectId: asString(raw.projectId),
+    projectHostSetupId: asString(raw.projectHostSetupId),
     hostId: asString(raw.hostId),
     terminalPlatform: asString(raw.terminalPlatform),
     repo: asString(raw.repo),
@@ -644,6 +650,8 @@ export type RedactedWorktreeRecord = {
   workspaceKind?: string;
   worktreeId: string;
   repoId?: string;
+  projectId?: string;
+  projectHostSetupId?: string;
   hostId?: string;
   terminalPlatform?: string;
   repo?: string;

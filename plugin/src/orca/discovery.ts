@@ -34,6 +34,9 @@ export type LogicalSession = {
   parentPaneKey?: string | null;
   hostId: string;
   repo?: string;
+  repoId?: string;
+  projectId?: string;
+  projectHostSetupId?: string;
   displayName?: string;
   worktreeUnread: boolean;
   agentType: AgentType;
@@ -151,6 +154,9 @@ export function joinDiscovery(input: JoinInput): DiscoverySnapshot {
         parentPaneKey: agent.parentPaneKey ?? null,
         hostId: wt.hostId ?? "local",
         repo: wt.repo,
+        repoId: wt.repoId,
+        projectId: wt.projectId,
+        projectHostSetupId: wt.projectHostSetupId,
         displayName: wt.displayName,
         worktreeUnread: wt.unread === true,
         agentType: normalizeAgentType(agent.agentType),

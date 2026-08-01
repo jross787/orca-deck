@@ -10,3 +10,4 @@ dev.onorca.agent-deck.sdPlugin/logs/
 coverage/
 tmp/
 .benchmark-out/
+overlay/.build/

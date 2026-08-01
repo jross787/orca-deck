@@ -826,6 +826,15 @@ export function selectDashboardSnapshot(
   const structuredReplyEnabled = false;
   const structuredReplyDetail = "REPLY UNAVAILABLE";
 
+  // Draft face defaults; runtime overlays live helper metadata after select.
+  const draftOpen = false;
+  const draftUi: ControlViewModel["draftUi"] = "empty";
+  const draftCharacters = 0;
+  const draftReady = false;
+  const draftAmbiguous = false;
+  const draftDetail = "open";
+  const newAgentEnabled = false;
+
   let urgency: ControlViewModel["urgency"] = "empty";
   if (!state.orcaReady || cards.length === 0) urgency = "empty";
   else if (
@@ -866,6 +875,13 @@ export function selectDashboardSnapshot(
       interruptEnabled,
       structuredReplyEnabled,
       structuredReplyDetail,
+      draftOpen,
+      draftUi,
+      draftCharacters,
+      draftReady,
+      draftAmbiguous,
+      draftDetail,
+      newAgentEnabled,
       orcaReady: state.orcaReady,
       urgency,
       issues: [...state.issues],

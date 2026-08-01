@@ -110,6 +110,18 @@ export function redactWorktree(
   if (repoId && (isPathLike(repoId) || (opts.scrubHumanIdentity && !isOpaqueId(repoId)))) {
     repoId = undefined;
   }
+  let projectId = wt.projectId;
+  if (projectId && (isPathLike(projectId) || (opts.scrubHumanIdentity && !isOpaqueId(projectId) && !projectId.includes(":")))) {
+    projectId = undefined;
+  }
+  let projectHostSetupId = wt.projectHostSetupId;
+  if (
+    projectHostSetupId &&
+    (isPathLike(projectHostSetupId) ||
+      (opts.scrubHumanIdentity && !isOpaqueId(projectHostSetupId)))
+  ) {
+    projectHostSetupId = undefined;
+  }
   let worktreeInstanceId = wt.worktreeInstanceId;
   if (
     worktreeInstanceId &&
@@ -130,6 +142,8 @@ export function redactWorktree(
     workspaceKind: wt.workspaceKind,
     worktreeId,
     repoId,
+    projectId,
+    projectHostSetupId,
     hostId,
     terminalPlatform: wt.terminalPlatform,
     repo,

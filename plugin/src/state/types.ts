@@ -147,6 +147,15 @@ export type ControlViewModel = {
   /** Structured options always fail-closed without typed public contract. */
   structuredReplyEnabled: boolean;
   structuredReplyDetail: string;
+  /** Draft overlay face metadata only — never draft text. */
+  draftOpen: boolean;
+  draftUi: "empty" | "editing" | "ready" | "submitting";
+  draftCharacters: number;
+  draftReady: boolean;
+  draftAmbiguous: boolean;
+  draftDetail: string;
+  /** New-agent keys enabled only when a reviewed draft is ready. */
+  newAgentEnabled: boolean;
   orcaReady: boolean;
   urgency: "working" | "idle" | "empty";
   issues: string[];

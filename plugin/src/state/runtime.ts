@@ -3,6 +3,7 @@
  * All session/control actions consume this store — no per-key polling.
  */
 
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import type { ConfigStore } from "../config/store.js";
 import { checkMutationPreconditions } from "../commands/preconditions.js";
 import {
@@ -15,9 +16,18 @@ import {
 import { evaluateRetrySupport } from "../commands/retry.js";
 import type { RedactedLogger } from "../diagnostics/logger.js";
 import {
+  buildLaunchArgsForSession,
+  buildOverlayContext,
+  DraftCoordinator,
+  type DraftFaceState,
+  type DraftMutationOutcome,
+  type LaunchProvider,
+} from "../draft/coordinator.js";
+import {
   MUTATION_COMMANDS,
   OrcaCliError,
   runOrca,
+  runOrcaJson,
   type OrcaCliOptions,
 } from "../orca/cli.js";
 import type { LogicalSession } from "../orca/discovery.js";
@@ -40,7 +50,7 @@ import {
   type DashboardState,
 } from "./reducer.js";
 import { PollScheduler, type SchedulerIntervals } from "./scheduler.js";
-import type { CardViewModel, DashboardSnapshot } from "./types.js";
+import type { CardViewModel, ControlViewModel, DashboardSnapshot } from "./types.js";
 import { SLOT_COUNT } from "./types.js";
 
 export type PaintTarget = {
@@ -67,8 +77,12 @@ export type DashboardRuntimeDeps = {
   refresh?: typeof refreshDiscovery;
   /** Injected focus runner for tests. */
   runFocus?: (handle: string, cli: OrcaCliOptions) => Promise<void>;
-  /** Injected mutation runner (preset/interrupt/close) for tests. */
+  /** Injected mutation runner (preset/interrupt/close/draft) for tests. */
   runMutation?: MutationRunner;
+  /** Optional absolute path to orca-draft-overlay helper. */
+  draftHelperPath?: string;
+  /** Injected helper spawner for tests. */
+  spawnDraftHelper?: (helperPath: string) => ChildProcessWithoutNullStreams;
   nowMs?: () => number;
   /**
    * Testable timer. Defaults to setTimeout.
@@ -81,8 +95,7 @@ type Listener = (snap: DashboardSnapshot) => void;
 
 export type RuntimeControlKind =
   | BasicControlKind
-  | SafeControlKind
-  | "draft";
+  | SafeControlKind;
 
 type HoldGesture = {
   token: number;
@@ -123,6 +136,15 @@ export class DashboardRuntime {
   /** Progress paint while holding interrupt/close. */
   private holdProgressRatio = 0;
   private holdProgressTargetId: string | null = null;
+  private readonly draft: DraftCoordinator;
+  private draftFace: DraftFaceState = {
+    open: false,
+    ui: "empty",
+    draftCharacters: 0,
+    draftBytes: 0,
+    pendingRequestId: null,
+    ambiguous: false,
+  };
 
   constructor(deps: DashboardRuntimeDeps) {
     this.deps = deps;
@@ -144,6 +166,21 @@ export class DashboardRuntime {
       onTick: async () => {
         await this.refresh();
       },
+    });
+
+    this.draft = new DraftCoordinator({
+      logger: deps.logger,
+      helperPath: deps.draftHelperPath,
+      spawnHelper: deps.spawnDraftHelper,
+      resolveContext: () => this.resolveDraftContext(),
+      sendExecutor: (input) => this.executeDraftSend(input),
+      launchExecutor: (input) => this.executeDraftLaunch(input),
+      onFaceChange: (face) => {
+        this.draftFace = face;
+        this.reprojectSnapshot();
+        void this.paintDraftControls();
+      },
+      nowMs: () => this.now(),
     });
 
     this.ready = this.bootstrap();
@@ -201,7 +238,45 @@ export class DashboardRuntime {
   }
 
   getSnapshot(): DashboardSnapshot {
-    return this.snapshot;
+    return this.withDraftFace(this.snapshot);
+  }
+
+  getDraftFaceForTests(): DraftFaceState {
+    return { ...this.draftFace };
+  }
+
+  getDraftCoordinatorForTests(): DraftCoordinator {
+    return this.draft;
+  }
+
+  async openDraftOverlay(): Promise<void> {
+    await this.ready;
+    await this.draft.openOrFocus();
+    this.reprojectSnapshot();
+    await this.paintDraftControls();
+  }
+
+  async focusDraftOverlay(): Promise<void> {
+    await this.openDraftOverlay();
+  }
+
+  async cancelDraftOverlay(): Promise<void> {
+    await this.ready;
+    await this.draft.requestCancelFromDeck();
+    this.reprojectSnapshot();
+    await this.paintDraftControls();
+  }
+
+  /** Deck Send key focuses helper; mutation originates from helper sendSelected once. */
+  async requestDraftSendFromDeck(): Promise<void> {
+    await this.ready;
+    await this.draft.requestSendFromDeck();
+  }
+
+  async requestDraftLaunchFromDeck(provider: LaunchProvider): Promise<void> {
+    await this.ready;
+    // Focus helper — launch is explicit from overlay or correlated helper message only.
+    await this.draft.openOrFocus();
   }
 
   getStateForTests(): DashboardState {
@@ -780,6 +855,7 @@ export class DashboardRuntime {
   stop(): void {
     this.scheduler.stop();
     this.clearHoldGesture({ paint: false });
+    this.draft.stop();
     if (this.persistTimer != null) {
       clearTimeout(this.persistTimer);
       this.persistTimer = null;
@@ -787,9 +863,10 @@ export class DashboardRuntime {
   }
 
   private emit(): void {
+    const snap = this.withDraftFace(this.snapshot);
     for (const l of this.listeners) {
       try {
-        l(this.snapshot);
+        l(snap);
       } catch {
         // listener errors must not break runtime
       }
@@ -843,18 +920,213 @@ export class DashboardRuntime {
   }
 
   private imageForControl(kind: RuntimeControlKind, targetId: string): string {
-    const control = this.snapshot.control;
-    if (kind === "next" || kind === "focus" || kind === "acknowledge") {
-      return controlSvgDataUrl(kind, control);
+    const control = this.withDraftFace(this.snapshot).control;
+    if (kind === "interrupt-close") {
+      const progress =
+        this.holdProgressTargetId === targetId ? this.holdProgressRatio : 0;
+      return controlSvgDataUrl(kind, control, { progress });
     }
-    if (kind === "draft") {
-      return controlSvgDataUrl("draft", control);
+    return controlSvgDataUrl(kind, control);
+  }
+
+  private withDraftFace(snap: DashboardSnapshot): DashboardSnapshot {
+    const face = this.draftFace;
+    const draftReady =
+      face.open && face.ui === "ready" && face.draftCharacters > 0 && !face.ambiguous;
+    const draftDetail = face.ambiguous
+      ? "AMBIGUOUS"
+      : !face.open
+        ? "open"
+        : face.ui === "submitting"
+          ? "SENDING"
+          : face.ui === "ready"
+            ? "READY"
+            : face.ui === "empty"
+              ? "EMPTY"
+              : face.ui.toUpperCase();
+    const control: ControlViewModel = {
+      ...snap.control,
+      draftOpen: face.open,
+      draftUi: face.ui,
+      draftCharacters: face.draftCharacters,
+      draftReady,
+      draftAmbiguous: face.ambiguous,
+      draftDetail,
+      newAgentEnabled: draftReady,
+    };
+    return { ...snap, control };
+  }
+
+  private reprojectSnapshot(): void {
+    // Base snapshot stays reducer-pure; draft face overlays in getSnapshot/imageForControl.
+    this.snapshot = selectDashboardSnapshot(this.state, this.now());
+    this.emit();
+  }
+
+  private async paintDraftControls(): Promise<void> {
+    const kinds: RuntimeControlKind[] = [
+      "draft",
+      "send-draft",
+      "cancel-draft",
+      "new-omp",
+      "new-claude",
+      "new-codex",
+    ];
+    await Promise.all(kinds.map((k) => this.paintControl(k)));
+  }
+
+  private resolveDraftContext(): {
+    logicalSessionId: string | null;
+    context: ReturnType<typeof buildOverlayContext>;
+  } {
+    const logicalSessionId = this.state.selectedLogicalSessionId;
+    const session = logicalSessionId ? this.findLiveSession(logicalSessionId) : undefined;
+    const cfg = this.deps.configStore.getConfig();
+    return {
+      logicalSessionId,
+      context: buildOverlayContext(session, cfg),
+    };
+  }
+
+  private async executeDraftSend(input: {
+    logicalSessionId: string;
+    draft: string;
+    requestId: string;
+  }): Promise<DraftMutationOutcome> {
+    // Capture logical id at draft session; refresh/rejoin; full preconditions; exactly one send.
+    await this.refresh();
+    const session = this.findLiveSession(input.logicalSessionId);
+    const gate = checkMutationPreconditions({
+      session,
+      kind: "draft_send",
+      orcaReady: this.snapshot.orcaReady,
+      presetText: input.draft,
+    });
+    if (!gate.ok || !session?.runtimeHandle) {
+      this.deps.logger.warn(
+        "draft_send_blocked",
+        { code: gate.ok ? "missing_handle" : gate.code },
+        { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
+      );
+      return {
+        kind: "failed",
+        code: gate.ok ? "missing_handle" : gate.code,
+        message: gate.ok ? "Missing terminal handle" : gate.message,
+      };
     }
-    const progress =
-      kind === "interrupt-close" && this.holdProgressTargetId === targetId
-        ? this.holdProgressRatio
-        : 0;
-    return controlSvgDataUrl(kind, control, { progress });
+    const handle = session.runtimeHandle;
+    const args = ["terminal", "send", "--terminal", handle, "--text", input.draft, "--enter"];
+    // Never terminal switch/focus.
+    try {
+      await this.runMutationArgs(args);
+      this.deps.logger.info(
+        "draft_sent",
+        { chars: input.draft.length },
+        { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
+      );
+      await this.refresh();
+      return { kind: "success" };
+    } catch (err) {
+      const code = err instanceof OrcaCliError ? err.code : "error";
+      if (code === "timeout" || code === "invalid_json" || code === "empty_stdout") {
+        this.deps.logger.error(
+          "draft_send_ambiguous",
+          { code },
+          { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
+        );
+        return {
+          kind: "ambiguous",
+          code,
+          message: "Outcome unknown — Focus required",
+        };
+      }
+      this.deps.logger.error(
+        "draft_send_failed",
+        { code },
+        { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
+      );
+      return {
+        kind: "failed",
+        code,
+        message: code === "non_zero_exit" ? "Send failed" : "Send failed",
+      };
+    }
+  }
+
+  private async executeDraftLaunch(input: {
+    logicalSessionId: string;
+    provider: LaunchProvider;
+    draft: string;
+    worktreeName: string;
+    requestId: string;
+  }): Promise<DraftMutationOutcome> {
+    await this.refresh();
+    const session = this.findLiveSession(input.logicalSessionId);
+    if (!session) {
+      return { kind: "failed", code: "no_session", message: "No logical session selected" };
+    }
+    if (!this.snapshot.orcaReady) {
+      return { kind: "failed", code: "orca_unavailable", message: "Orca runtime is not ready." };
+    }
+    const args = buildLaunchArgsForSession(
+      session,
+      input.provider,
+      input.draft,
+      input.worktreeName,
+    );
+    if (!args) {
+      return {
+        kind: "failed",
+        code: "missing_launch_target",
+        message: "No projectHostSetupId or repoId for selected session",
+      };
+    }
+    // Exactly one worktree create; never --activate.
+    try {
+      if (this.deps.runMutation) {
+        await this.deps.runMutation(args, this.cliOpts());
+      } else {
+        const result = await runOrcaJson(args, this.cliOpts());
+        if (!result || (result as { json?: { ok?: boolean } }).json?.ok === false) {
+          return {
+            kind: "failed",
+            code: "non_zero_exit",
+            message: "Worktree create failed",
+          };
+        }
+      }
+      this.deps.logger.info(
+        "draft_launch_ok",
+        { provider: input.provider },
+        { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
+      );
+      await this.refresh();
+      return { kind: "success" };
+    } catch (err) {
+      const code = err instanceof OrcaCliError ? err.code : "error";
+      if (code === "timeout" || code === "invalid_json" || code === "empty_stdout") {
+        this.deps.logger.error(
+          "draft_launch_ambiguous",
+          { code, provider: input.provider },
+          { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
+        );
+        return {
+          kind: "ambiguous",
+          code,
+          message: "Outcome unknown — Focus required",
+        };
+      }
+      this.deps.logger.error(
+        "draft_launch_failed",
+        { code, provider: input.provider },
+        { ids: { logicalSessionId: input.logicalSessionId, requestId: input.requestId } },
+      );
+      return {
+        kind: "failed",
+        code,
+        message: "Worktree create failed",
+      };
+    }
   }
 
   private async flashControls(kind: RuntimeControlKind, ok: boolean): Promise<void> {

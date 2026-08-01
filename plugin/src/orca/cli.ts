@@ -204,4 +204,5 @@ export const MUTATION_COMMANDS = {
   terminalSwitch: ["terminal", "switch"] as const,
   terminalClose: ["terminal", "close"] as const,
   terminalInterrupt: ["terminal", "send", "--interrupt"] as const,
+  worktreeCreate: ["worktree", "create"] as const,
 } as const;

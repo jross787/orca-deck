@@ -1,5 +1,5 @@
 /**
- * Next Attention, Focus, Acknowledge, and Phase 3 safe control keypad actions.
+ * Next Attention, Focus, Acknowledge, Phase 3 safe controls, and Phase 4 draft actions.
  * Share one DashboardRuntime; never poll independently.
  */
 
@@ -28,7 +28,12 @@ export const PRESET_3_UUID = "dev.onorca.agent-deck.preset-3";
 export const PRESET_4_UUID = "dev.onorca.agent-deck.preset-4";
 export const RETRY_UUID = "dev.onorca.agent-deck.retry";
 export const STRUCTURED_REPLY_UUID = "dev.onorca.agent-deck.structured-reply";
-export const DRAFT_PLACEHOLDER_UUID = "dev.onorca.agent-deck.draft";
+export const DRAFT_UUID = "dev.onorca.agent-deck.draft";
+export const SEND_DRAFT_UUID = "dev.onorca.agent-deck.send-draft";
+export const CANCEL_DRAFT_UUID = "dev.onorca.agent-deck.cancel-draft";
+export const NEW_OMP_UUID = "dev.onorca.agent-deck.new-omp";
+export const NEW_CLAUDE_UUID = "dev.onorca.agent-deck.new-claude";
+export const NEW_CODEX_UUID = "dev.onorca.agent-deck.new-codex";
 
 export const SAFE_CONTROL_UUIDS = [
   INTERRUPT_CLOSE_UUID,
@@ -38,7 +43,12 @@ export const SAFE_CONTROL_UUIDS = [
   PRESET_4_UUID,
   RETRY_UUID,
   STRUCTURED_REPLY_UUID,
-  DRAFT_PLACEHOLDER_UUID,
+  DRAFT_UUID,
+  SEND_DRAFT_UUID,
+  CANCEL_DRAFT_UUID,
+  NEW_OMP_UUID,
+  NEW_CLAUDE_UUID,
+  NEW_CODEX_UUID,
 ] as const;
 
 export type ControlActionDeps = {
@@ -284,11 +294,10 @@ export class StructuredReplyAction extends SingletonAction<ControlActionSettings
 }
 
 /**
- * Draft key is a non-executing Phase 4 placeholder face so layout stays stable.
- * Presses do nothing (no terminal input).
+ * Draft — starts or focuses the on-demand SwiftUI overlay helper.
  */
-@action({ UUID: DRAFT_PLACEHOLDER_UUID })
-export class DraftPlaceholderAction extends SingletonAction<ControlActionSettings> {
+@action({ UUID: DRAFT_UUID })
+export class DraftAction extends SingletonAction<ControlActionSettings> {
   private readonly deps: ControlActionDeps;
   private readonly targets = new Map<string, PaintTarget>();
 
@@ -306,8 +315,100 @@ export class DraftPlaceholderAction extends SingletonAction<ControlActionSetting
   }
 
   override async onKeyDown(_ev: KeyDownEvent<ControlActionSettings>): Promise<void> {
-    // Phase 4 — intentionally non-executing.
+    await this.deps.runtime.openDraftOverlay();
   }
+}
+
+
+@action({ UUID: SEND_DRAFT_UUID })
+export class SendDraftAction extends SingletonAction<ControlActionSettings> {
+  private readonly deps: ControlActionDeps;
+  private readonly targets = new Map<string, PaintTarget>();
+
+  constructor(deps: ControlActionDeps) {
+    super();
+    this.deps = deps;
+  }
+
+  override async onWillAppear(ev: WillAppearEvent<ControlActionSettings>): Promise<void> {
+    await appear("send-draft", this.deps, this.targets, ev);
+  }
+
+  override onWillDisappear(ev: WillDisappearEvent<ControlActionSettings>): void {
+    disappear("send-draft", this.deps, this.targets, ev);
+  }
+
+  override async onKeyDown(_ev: KeyDownEvent<ControlActionSettings>): Promise<void> {
+    // Focus helper so the correlated send originates once from helper draft memory.
+    await this.deps.runtime.requestDraftSendFromDeck();
+  }
+}
+
+@action({ UUID: CANCEL_DRAFT_UUID })
+export class CancelDraftAction extends SingletonAction<ControlActionSettings> {
+  private readonly deps: ControlActionDeps;
+  private readonly targets = new Map<string, PaintTarget>();
+
+  constructor(deps: ControlActionDeps) {
+    super();
+    this.deps = deps;
+  }
+
+  override async onWillAppear(ev: WillAppearEvent<ControlActionSettings>): Promise<void> {
+    await appear("cancel-draft", this.deps, this.targets, ev);
+  }
+
+  override onWillDisappear(ev: WillDisappearEvent<ControlActionSettings>): void {
+    disappear("cancel-draft", this.deps, this.targets, ev);
+  }
+
+  override async onKeyDown(_ev: KeyDownEvent<ControlActionSettings>): Promise<void> {
+    // Cancel closes helper only — no Orca mutation, no clipboard touch.
+    await this.deps.runtime.cancelDraftOverlay();
+  }
+}
+
+abstract class NewAgentActionBase extends SingletonAction<ControlActionSettings> {
+  protected abstract readonly provider: "omp" | "claude" | "codex";
+  protected abstract readonly kind: RuntimeControlKind;
+  private readonly deps: ControlActionDeps;
+  private readonly targets = new Map<string, PaintTarget>();
+
+  constructor(deps: ControlActionDeps) {
+    super();
+    this.deps = deps;
+  }
+
+  override async onWillAppear(ev: WillAppearEvent<ControlActionSettings>): Promise<void> {
+    await appear(this.kind, this.deps, this.targets, ev);
+  }
+
+  override onWillDisappear(ev: WillDisappearEvent<ControlActionSettings>): void {
+    disappear(this.kind, this.deps, this.targets, ev);
+  }
+
+  override async onKeyDown(_ev: KeyDownEvent<ControlActionSettings>): Promise<void> {
+    // Focus helper; launch is explicit once from helper launchAgent message.
+    await this.deps.runtime.requestDraftLaunchFromDeck(this.provider);
+  }
+}
+
+@action({ UUID: NEW_OMP_UUID })
+export class NewOmpAction extends NewAgentActionBase {
+  protected readonly provider = "omp" as const;
+  protected readonly kind = "new-omp" as const;
+}
+
+@action({ UUID: NEW_CLAUDE_UUID })
+export class NewClaudeAction extends NewAgentActionBase {
+  protected readonly provider = "claude" as const;
+  protected readonly kind = "new-claude" as const;
+}
+
+@action({ UUID: NEW_CODEX_UUID })
+export class NewCodexAction extends NewAgentActionBase {
+  protected readonly provider = "codex" as const;
+  protected readonly kind = "new-codex" as const;
 }
 
 export function createSafeControlActions(deps: ControlActionDeps): SingletonAction<ControlActionSettings>[] {
@@ -319,6 +420,11 @@ export function createSafeControlActions(deps: ControlActionDeps): SingletonActi
     new Preset4Action(deps),
     new RetryAction(deps),
     new StructuredReplyAction(deps),
-    new DraftPlaceholderAction(deps),
+    new DraftAction(deps),
+    new SendDraftAction(deps),
+    new CancelDraftAction(deps),
+    new NewOmpAction(deps),
+    new NewClaudeAction(deps),
+    new NewCodexAction(deps),
   ];
 }

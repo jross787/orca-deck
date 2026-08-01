@@ -234,7 +234,12 @@ export type SafeControlKind =
   | "preset-4"
   | "retry"
   | "structured-reply"
-  | "draft";
+  | "draft"
+  | "send-draft"
+  | "cancel-draft"
+  | "new-omp"
+  | "new-claude"
+  | "new-codex";
 
 export type ControlKind = BasicControlKind | SafeControlKind;
 
@@ -264,6 +269,13 @@ type ControlFaceInput = Pick<
       | "structuredReplyEnabled"
       | "structuredReplyDetail"
       | "presetKey"
+      | "draftOpen"
+      | "draftUi"
+      | "draftCharacters"
+      | "draftReady"
+      | "draftAmbiguous"
+      | "draftDetail"
+      | "newAgentEnabled"
     >
   >;
 
@@ -365,11 +377,77 @@ function controlFace(
       borderWidth: 1,
     };
   }
-  // draft placeholder — Phase 4 non-executing face
+  if (kind === "draft") {
+    const open = control.draftOpen === true;
+    const ambiguous = control.draftAmbiguous === true;
+    const ui = control.draftUi ?? "empty";
+    let detail = control.draftDetail || "open";
+    let color = palette.idle;
+    if (ambiguous) {
+      detail = "AMBIGUOUS";
+      color = palette.waiting;
+    } else if (ui === "submitting") {
+      detail = "SENDING";
+      color = palette.waiting;
+    } else if (ui === "ready" || control.draftReady) {
+      detail = "READY";
+      color = palette.done;
+    } else if (open) {
+      detail = ui === "empty" ? "EMPTY" : ui.toUpperCase();
+      color = palette.working;
+    }
+    return {
+      title: "DRAFT",
+      detail,
+      color,
+      border: open ? palette.selectedBorder : palette.line,
+      borderWidth: open ? 2 : 1,
+    };
+  }
+  if (kind === "send-draft") {
+    const enabled = control.draftReady === true && control.draftAmbiguous !== true;
+    return {
+      title: "SEND",
+      detail: control.draftAmbiguous ? "FOCUS REQ" : enabled ? "selected" : "blocked",
+      color: enabled ? palette.done : palette.idle,
+      border: palette.line,
+      borderWidth: 1,
+    };
+  }
+  if (kind === "cancel-draft") {
+    const open = control.draftOpen === true;
+    return {
+      title: "CANCEL",
+      detail: open ? "close draft" : "idle",
+      color: open ? palette.error : palette.idle,
+      border: palette.line,
+      borderWidth: 1,
+    };
+  }
+  if (kind === "new-omp" || kind === "new-claude" || kind === "new-codex") {
+    const labels = {
+      "new-omp": "OMP*",
+      "new-claude": "CLAUDE*",
+      "new-codex": "CODEX*",
+    } as const;
+    const colors = {
+      "new-omp": palette.working,
+      "new-claude": palette.waiting,
+      "new-codex": palette.stuck,
+    } as const;
+    const enabled = control.newAgentEnabled === true;
+    return {
+      title: labels[kind],
+      detail: enabled ? "launch" : "need draft",
+      color: enabled ? colors[kind] : palette.idle,
+      border: palette.line,
+      borderWidth: 1,
+    };
+  }
   return {
-    title: "DRAFT",
-    detail: "phase 4",
-    color: palette.idle,
+    title: "CTRL",
+    detail: "unknown",
+    color: palette.unknown,
     border: palette.line,
     borderWidth: 1,
   };
