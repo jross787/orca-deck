@@ -491,8 +491,12 @@ function refreshDashboard(
   for (const id of prevLiveIds) {
     if (nextLiveIds.has(id)) continue;
     if (state.ghosts.has(id)) continue;
-    // Fully gone: clear suppression so a future new appearance is a new lifecycle.
-    state.suppressedClosedIds.delete(id);
+    // Suppressed acked-closed finally delisted: drop tracking without identity-lost resurrection.
+    if (state.suppressedClosedIds.has(id)) {
+      state.suppressedClosedIds.delete(id);
+      freeSession(state, id);
+      continue;
+    }
     const prev = state.liveById.get(id)!;
     makeIdentityLostGhost(state, id, nowMs, labelsFromSession(prev), prev);
   }

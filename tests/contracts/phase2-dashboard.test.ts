@@ -1113,9 +1113,15 @@ describe("acked closed missing_terminal stays suppressed", () => {
     assert.equal(snap.cards.find((c) => c.logicalSessionId === "wt:gone"), undefined);
     assert.ok(state.suppressedClosedIds.has("wt:gone"));
 
-    // Full disappearance clears suppression; new appearance is a new lifecycle.
+    // Full disappearance clears suppression without identity-lost resurrection.
     state = refresh(state, [], 50);
     assert.equal(state.suppressedClosedIds.has("wt:gone"), false);
+    assert.equal(state.ghosts.has("wt:gone"), false);
+    assert.equal(state.metaById.has("wt:gone"), false);
+    assert.equal(
+      selectDashboardSnapshot(state, 50).cards.find((c) => c.logicalSessionId === "wt:gone"),
+      undefined,
+    );
   });
 
   it("first-observed missing_terminal uses closed-ghost lifecycle", () => {
