@@ -72,7 +72,7 @@ export type PaintTarget = {
 export type MutationRunner = (
   args: readonly string[],
   cli: OrcaCliOptions,
-) => Promise<void>;
+) => Promise<OrcaCliResult>;
 
 export type TimerHandle = { clear: () => void };
 
@@ -83,8 +83,8 @@ export type DashboardRuntimeDeps = {
   alertEngine?: AlertEngine;
   /** Injected discovery for tests. */
   refresh?: typeof refreshDiscovery;
-  /** Injected focus runner for tests. */
-  runFocus?: (handle: string, cli: OrcaCliOptions) => Promise<void>;
+  /** Injected focus runner for tests. Must return full OrcaCliResult for confirmation. */
+  runFocus?: (handle: string, cli: OrcaCliOptions) => Promise<OrcaCliResult>;
   /** Injected mutation runner (preset/interrupt/close) for tests. */
   runMutation?: MutationRunner;
   /**
@@ -244,12 +244,11 @@ export class DashboardRuntime {
     };
   }
 
-  private async runMutationArgs(args: readonly string[]): Promise<void> {
+  private async runMutationArgs(args: readonly string[]): Promise<OrcaCliResult> {
     if (this.deps.runMutation) {
-      await this.deps.runMutation(args, this.cliOpts());
-      return;
+      return this.deps.runMutation(args, this.cliOpts());
     }
-    await runOrca(args, this.cliOpts());
+    return runOrca(args, this.cliOpts());
   }
 
   async whenReady(): Promise<void> {
@@ -546,19 +545,27 @@ export class DashboardRuntime {
 
     const handle = session.runtimeHandle;
     try {
-      if (this.deps.runFocus) {
-        await this.deps.runFocus(handle, this.cliOpts());
+      const result = this.deps.runFocus
+        ? await this.deps.runFocus(handle, this.cliOpts())
+        : await runOrca([...MUTATION_COMMANDS.terminalSwitch, "--terminal", handle], this.cliOpts());
+      const confirm = confirmOrcaCliResult(result);
+      if (!confirm.ok) {
+        this.deps.logger.error(
+          "focus_failed",
+          { code: confirm.code, exitCode: result.exitCode ?? -1 },
+          { ids: { logicalSessionId: selectedId } },
+        );
+        await this.flashControls("focus", false);
       } else {
-        await runOrca([...MUTATION_COMMANDS.terminalSwitch, "--terminal", handle], this.cliOpts());
+        this.state = reduceDashboard(this.state, {
+          type: "focus_success",
+          logicalSessionId: selectedId,
+          nowMs: this.now(),
+        });
+        this.snapshot = selectDashboardSnapshot(this.state, this.now());
+        this.schedulePersist();
+        await this.flashControls("focus", true);
       }
-      this.state = reduceDashboard(this.state, {
-        type: "focus_success",
-        logicalSessionId: selectedId,
-        nowMs: this.now(),
-      });
-      this.snapshot = selectDashboardSnapshot(this.state, this.now());
-      this.schedulePersist();
-      await this.flashControls("focus", true);
     } catch (err) {
       const code = err instanceof OrcaCliError ? err.code : "error";
       this.deps.logger.error("focus_failed", { code }, { ids: { logicalSessionId: selectedId } });
@@ -611,13 +618,28 @@ export class DashboardRuntime {
     const handle = session.runtimeHandle;
     const args = buildPresetSendArgs(handle, resolved.text);
     try {
-      await this.runMutationArgs(args);
-      this.deps.logger.info(
-        "preset_sent",
-        { presetIndex: index, presetKey: resolved.key },
-        { ids: { logicalSessionId: selectedId } },
-      );
-      await this.flashControlTarget(kind, true, initiatingTargetId);
+      const result = await this.runMutationArgs(args);
+      const confirm = confirmOrcaCliResult(result);
+      if (!confirm.ok) {
+        this.deps.logger.error(
+          "preset_failed",
+          {
+            code: confirm.code,
+            presetIndex: index,
+            presetKey: resolved.key,
+            exitCode: result.exitCode ?? -1,
+          },
+          { ids: { logicalSessionId: selectedId } },
+        );
+        await this.flashControlTarget(kind, false, initiatingTargetId);
+      } else {
+        this.deps.logger.info(
+          "preset_sent",
+          { presetIndex: index, presetKey: resolved.key, exitCode: result.exitCode ?? -1 },
+          { ids: { logicalSessionId: selectedId } },
+        );
+        await this.flashControlTarget(kind, true, initiatingTargetId);
+      }
     } catch (err) {
       const code = err instanceof OrcaCliError ? err.code : "error";
       this.deps.logger.error(
@@ -791,9 +813,23 @@ export class DashboardRuntime {
     }
     const handle = session.runtimeHandle;
     try {
-      await this.runMutationArgs(buildInterruptArgs(handle));
-      this.deps.logger.info("interrupt_sent", {}, { ids: { logicalSessionId: logicalId } });
-      await this.flashControlTarget("interrupt-close", true, initiating);
+      const result = await this.runMutationArgs(buildInterruptArgs(handle));
+      const confirm = confirmOrcaCliResult(result);
+      if (!confirm.ok) {
+        this.deps.logger.error(
+          "interrupt_failed",
+          { code: confirm.code, exitCode: result.exitCode ?? -1 },
+          { ids: { logicalSessionId: logicalId } },
+        );
+        await this.flashControlTarget("interrupt-close", false, initiating);
+      } else {
+        this.deps.logger.info(
+          "interrupt_sent",
+          { exitCode: result.exitCode ?? -1 },
+          { ids: { logicalSessionId: logicalId } },
+        );
+        await this.flashControlTarget("interrupt-close", true, initiating);
+      }
     } catch (err) {
       const code = err instanceof OrcaCliError ? err.code : "error";
       this.deps.logger.error("interrupt_failed", { code }, { ids: { logicalSessionId: logicalId } });
@@ -868,9 +904,23 @@ export class DashboardRuntime {
     }
     const handle = session.runtimeHandle;
     try {
-      await this.runMutationArgs(buildCloseArgs(handle));
-      this.deps.logger.info("close_sent", {}, { ids: { logicalSessionId: logicalId } });
-      await this.flashControlTarget("interrupt-close", true, initiating);
+      const result = await this.runMutationArgs(buildCloseArgs(handle));
+      const confirm = confirmOrcaCliResult(result);
+      if (!confirm.ok) {
+        this.deps.logger.error(
+          "close_failed",
+          { code: confirm.code, exitCode: result.exitCode ?? -1 },
+          { ids: { logicalSessionId: logicalId } },
+        );
+        await this.flashControlTarget("interrupt-close", false, initiating);
+      } else {
+        this.deps.logger.info(
+          "close_sent",
+          { exitCode: result.exitCode ?? -1 },
+          { ids: { logicalSessionId: logicalId } },
+        );
+        await this.flashControlTarget("interrupt-close", true, initiating);
+      }
     } catch (err) {
       const code = err instanceof OrcaCliError ? err.code : "error";
       this.deps.logger.error("close_failed", { code }, { ids: { logicalSessionId: logicalId } });
@@ -1270,46 +1320,25 @@ export class DashboardRuntime {
 
 
 /**
- * Confirmed draft mutation outcome from a retained OrcaCliResult.
- * Success only when exitCode===0 and parsed envelope is not ok:false.
- * Nonzero (including stdout JSON) and ok:false => failed (preserve draft).
- * timeout/invalid_json/empty_stdout => ambiguous.
+ * Shared mutation CLI confirmation from a retained OrcaCliResult.
+ * Success only when exitCode===0 and parsed JSON envelope is not ok:false.
+ * Nonzero (including stdout JSON), ok:false, empty/invalid stdout, timeout => not ok.
+ * Never inspects argv/prompt/preset content — codes only.
  */
-export function confirmDraftCliOutcome(
-  result: OrcaCliResult,
-  failedMessage: string,
-): DraftMutationOutcome {
-  if (result.timedOut) {
-    return {
-      kind: "ambiguous",
-      code: "timeout",
-      message: "Outcome unknown — Focus required",
-    };
-  }
-  if (result.exitCode !== 0) {
-    return {
-      kind: "failed",
-      code: "non_zero_exit",
-      message: failedMessage,
-    };
-  }
+export type OrcaCliConfirmResult =
+  | { ok: true }
+  | { ok: false; code: string };
+
+export function confirmOrcaCliResult(result: OrcaCliResult): OrcaCliConfirmResult {
+  if (result.timedOut) return { ok: false, code: "timeout" };
+  if (result.exitCode !== 0) return { ok: false, code: "non_zero_exit" };
   const trimmed = result.stdout.trim();
-  if (trimmed.length === 0) {
-    return {
-      kind: "ambiguous",
-      code: "empty_stdout",
-      message: "Outcome unknown — Focus required",
-    };
-  }
+  if (trimmed.length === 0) return { ok: false, code: "empty_stdout" };
   let parsed: unknown;
   try {
     parsed = JSON.parse(trimmed) as unknown;
   } catch {
-    return {
-      kind: "ambiguous",
-      code: "invalid_json",
-      message: "Outcome unknown — Focus required",
-    };
+    return { ok: false, code: "invalid_json" };
   }
   if (
     typeof parsed === "object" &&
@@ -1318,13 +1347,38 @@ export function confirmDraftCliOutcome(
     "ok" in parsed &&
     (parsed as { ok?: unknown }).ok === false
   ) {
+    return { ok: false, code: "envelope_not_ok" };
+  }
+  return { ok: true };
+}
+
+/**
+ * Draft mutation outcome mapping on top of shared CLI confirmation.
+ * Nonzero/ok:false => failed (preserve draft).
+ * timeout/invalid_json/empty_stdout => ambiguous.
+ */
+export function confirmDraftCliOutcome(
+  result: OrcaCliResult,
+  failedMessage: string,
+): DraftMutationOutcome {
+  const confirm = confirmOrcaCliResult(result);
+  if (confirm.ok) return { kind: "success" };
+  if (
+    confirm.code === "timeout" ||
+    confirm.code === "empty_stdout" ||
+    confirm.code === "invalid_json"
+  ) {
     return {
-      kind: "failed",
-      code: "envelope_not_ok",
-      message: failedMessage,
+      kind: "ambiguous",
+      code: confirm.code,
+      message: "Outcome unknown — Focus required",
     };
   }
-  return { kind: "success" };
+  return {
+    kind: "failed",
+    code: confirm.code,
+    message: failedMessage,
+  };
 }
 
 function presetKind(index: PresetIndex): SafeControlKind {

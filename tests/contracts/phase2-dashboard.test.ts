@@ -641,6 +641,15 @@ describe("Focus exact refreshed handle", () => {
         }),
         runFocus: async (handle) => {
           handles.push(handle);
+          return {
+        argv: ["orca"],
+        stdout: '{"ok":true}',
+        stderr: "",
+        exitCode: 0,
+        signal: null,
+        durationMs: 1,
+        timedOut: false,
+      };
         },
       });
       await runtime.whenReady();

@@ -44,7 +44,11 @@ import {
   reduceDashboard,
   selectDashboardSnapshot,
 } from "../../plugin/src/state/reducer.js";
-import { DashboardRuntime, type TimerHandle } from "../../plugin/src/state/runtime.js";
+import {
+  confirmOrcaCliResult,
+  DashboardRuntime,
+  type TimerHandle,
+} from "../../plugin/src/state/runtime.js";
 import { SLOT_COUNT } from "../../plugin/src/state/types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -77,6 +81,20 @@ function session(
 }
 
 type MutationCall = { args: string[] };
+
+
+function okCliResult(over: Partial<{ stdout: string; exitCode: number | null; timedOut: boolean }> = {}) {
+  return {
+    argv: ["orca"],
+    stdout: over.stdout ?? '{"ok":true}',
+    stderr: "",
+    exitCode: over.exitCode === undefined ? 0 : over.exitCode,
+    signal: null,
+    durationMs: 1,
+    timedOut: over.timedOut ?? false,
+  };
+}
+
 
 async function makeRuntime(opts: {
   tmp: string;
@@ -131,9 +149,27 @@ async function makeRuntime(opts: {
     }),
     runMutation: async (args) => {
       opts.mutations.push({ args: [...args] });
+      return {
+        argv: ["orca"],
+        stdout: '{"ok":true}',
+        stderr: "",
+        exitCode: 0,
+        signal: null,
+        durationMs: 1,
+        timedOut: false,
+      };
     },
     runFocus: async () => {
       opts.mutations.push({ args: ["terminal", "switch", "--FOCUS-SHOULD-NOT-RUN"] });
+      return {
+        argv: ["orca"],
+        stdout: '{"ok":true}',
+        stderr: "",
+        exitCode: 0,
+        signal: null,
+        durationMs: 1,
+        timedOut: false,
+      };
     },
   });
   await runtime.whenReady();
@@ -306,6 +342,15 @@ describe("preset text never enters logs or diagnostics", () => {
         }),
         runMutation: async (args) => {
           mutations.push({ args: [...args] });
+          return {
+        argv: ["orca"],
+        stdout: '{"ok":true}',
+        stderr: "",
+        exitCode: 0,
+        signal: null,
+        durationMs: 1,
+        timedOut: false,
+      };
         },
       });
       await runtime.whenReady();
@@ -492,6 +537,15 @@ describe("interrupt short release vs hold close", () => {
         },
         runMutation: async (args) => {
           mutations.push({ args: [...args] });
+          return {
+        argv: ["orca"],
+        stdout: '{"ok":true}',
+        stderr: "",
+        exitCode: 0,
+        signal: null,
+        durationMs: 1,
+        timedOut: false,
+      };
         },
       });
       await runtime.whenReady();
@@ -889,3 +943,194 @@ describe("manifest Phase 3 layout and assets", () => {
     }
   });
 });
+
+describe("mutation CLI confirmation fail-closed", () => {
+  it("confirmOrcaCliResult rejects nonzero stdout, ok:false, empty, invalid, timeout", () => {
+    assert.equal(confirmOrcaCliResult(okCliResult()).ok, true);
+    assert.equal(confirmOrcaCliResult(okCliResult({ exitCode: 1, stdout: '{"ok":true}' })).ok, false);
+    assert.equal(confirmOrcaCliResult(okCliResult({ stdout: '{"ok":false}' })).ok, false);
+    assert.equal(confirmOrcaCliResult(okCliResult({ stdout: "" })).ok, false);
+    assert.equal(confirmOrcaCliResult(okCliResult({ stdout: "not-json" })).ok, false);
+    assert.equal(confirmOrcaCliResult(okCliResult({ timedOut: true, exitCode: null })).ok, false);
+  });
+
+  it("focus ok:false does not focus_success or clear unread", async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "orca-deck-p3cf-"));
+    try {
+      const paths = resolveConfigPaths(tmp);
+      const configStore = new ConfigStore({ paths, watch: false });
+      await configStore.load();
+      const logger = new RedactedLogger({
+        logPath: path.join(tmp, "p.log"),
+        sink: async () => undefined,
+      });
+      const runtime = new DashboardRuntime({
+        configStore,
+        logger,
+        metadataStore: new MetadataStore({ paths }),
+        alertEngine: new AlertEngine({ enabled: false, platform: "linux" }),
+        refresh: async () => ({
+          ok: true,
+          durationMs: 1,
+          snapshot: {
+            capturedAtMs: Date.now(),
+            orcaReady: true,
+            capabilities: [],
+            ignoredShellCount: 0,
+            ambiguousCount: 0,
+            issues: [],
+            sessions: [
+              session({
+                logicalSessionId: "wt:s1",
+                worktreeId: "wt",
+                paneKey: "s1",
+                state: "waiting",
+                rawState: "waiting",
+                stateStartedAt: 1,
+                runtimeHandle: "h-focus" as RuntimeTerminalHandle,
+              }),
+            ],
+          },
+        }),
+        runFocus: async () => okCliResult({ stdout: '{"ok":false,"error":"nope"}' }),
+      });
+      await runtime.whenReady();
+      await runtime.refresh();
+      await runtime.selectSession("wt:s1");
+      const before = runtime.getSnapshot();
+      assert.equal(before.control.selectedCard?.unread, true);
+      const okFlash: string[] = [];
+      const alertFlash: string[] = [];
+      runtime.registerControlTarget("focus", {
+        id: "focus-k",
+        setImage: async () => undefined,
+        showOk: async () => {
+          okFlash.push("ok");
+        },
+        showAlert: async () => {
+          alertFlash.push("alert");
+        },
+      });
+      await runtime.focusSelected();
+      const after = runtime.getSnapshot();
+      assert.equal(after.control.selectedCard?.unread, true, "unread must remain without focus_success");
+      assert.equal(okFlash.length, 0);
+      assert.equal(alertFlash.length, 1);
+      assert.equal(logger.events.some((e) => e.msg === "focus_failed"), true);
+      assert.equal(logger.events.some((e) => e.msg === "focus_success" || e.msg === "focus_ok"), false);
+      runtime.stop();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("preset/interrupt/close treat nonzero-with-stdout as failure without success log/flash", async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "orca-deck-p3cm-"));
+    try {
+      const mutations: MutationCall[] = [];
+      let fire: (() => void | Promise<void>) | null = null;
+      const paths = resolveConfigPaths(tmp);
+      const configStore = new ConfigStore({ paths, watch: false });
+      await configStore.load();
+      await configStore.patch({ holdToCloseMs: 1500 });
+      const logger = new RedactedLogger({
+        logPath: path.join(tmp, "p.log"),
+        sink: async () => undefined,
+      });
+      const runtime = new DashboardRuntime({
+        configStore,
+        logger,
+        metadataStore: new MetadataStore({ paths }),
+        alertEngine: new AlertEngine({ enabled: false, platform: "linux" }),
+        schedule: (fn) => {
+          fire = fn;
+          return {
+            clear: () => {
+              fire = null;
+            },
+          };
+        },
+        refresh: async () => ({
+          ok: true,
+          durationMs: 1,
+          snapshot: {
+            capturedAtMs: Date.now(),
+            orcaReady: true,
+            capabilities: [],
+            ignoredShellCount: 0,
+            ambiguousCount: 0,
+            issues: [],
+            sessions: [
+              session({
+                logicalSessionId: "wt:s1",
+                worktreeId: "wt",
+                paneKey: "s1",
+                agentType: "claude",
+                runtimeHandle: "h-m" as RuntimeTerminalHandle,
+              }),
+            ],
+          },
+        }),
+        runMutation: async (args) => {
+          mutations.push({ args: [...args] });
+          return okCliResult({ exitCode: 2, stdout: '{"ok":true,"note":"nonzero"}' });
+        },
+      });
+      await runtime.whenReady();
+      await runtime.refresh();
+      await runtime.selectSession("wt:s1");
+
+      const okFlash: string[] = [];
+      const alertFlash: string[] = [];
+      for (const id of ["preset-1", "interrupt-close"] as const) {
+        runtime.registerControlTarget(id, {
+          id: `${id}-k`,
+          setImage: async () => undefined,
+          showOk: async () => {
+            okFlash.push(id);
+          },
+          showAlert: async () => {
+            alertFlash.push(id);
+          },
+        });
+      }
+
+      await runtime.sendPreset(0, "preset-1-k");
+      assert.equal(mutations.length, 1);
+      assert.equal(logger.events.some((e) => e.msg === "preset_sent"), false);
+      assert.equal(logger.events.some((e) => e.msg === "preset_failed"), true);
+      assert.equal(okFlash.includes("preset-1"), false);
+      assert.equal(alertFlash.includes("preset-1"), true);
+
+      runtime.beginInterruptHold("interrupt-close-k");
+      await runtime.endInterruptHold("interrupt-close-k");
+      assert.equal(mutations.some((m) => m.args.includes("--interrupt")), true);
+      assert.equal(logger.events.some((e) => e.msg === "interrupt_sent"), false);
+      assert.equal(logger.events.some((e) => e.msg === "interrupt_failed"), true);
+      assert.equal(okFlash.includes("interrupt-close"), false);
+      assert.equal(alertFlash.includes("interrupt-close"), true);
+
+      // clear flashes and run hold-close threshold
+      okFlash.length = 0;
+      alertFlash.length = 0;
+      runtime.beginInterruptHold("interrupt-close-k");
+      assert.ok(fire);
+      await Promise.resolve((fire as () => void | Promise<void>)());
+      assert.equal(mutations.some((m) => m.args[1] === "close"), true);
+      assert.equal(logger.events.some((e) => e.msg === "close_sent"), false);
+      assert.equal(logger.events.some((e) => e.msg === "close_failed"), true);
+      assert.equal(okFlash.includes("interrupt-close"), false);
+      assert.equal(alertFlash.includes("interrupt-close"), true);
+
+      // Redaction: no preset body in logs
+      const blob = JSON.stringify(logger.events);
+      assert.equal(blob.includes("--text"), false);
+      assert.equal(blob.includes(DEFAULT_PRESETS[0]), false);
+
+      runtime.stop();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+});
+

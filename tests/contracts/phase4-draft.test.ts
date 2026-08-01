@@ -485,6 +485,15 @@ describe("phase4 runtime send/launch", () => {
           });
         }
         opts.mutations.push([...args]);
+        return {
+          argv: ["orca"],
+          stdout: '{"ok":true}',
+          stderr: "",
+          exitCode: 0,
+          signal: null,
+          durationMs: 1,
+          timedOut: false,
+        };
       },
       runDraftCli: async (args) => {
         if (opts.failCode === "timeout") {
@@ -694,6 +703,15 @@ describe("phase4 runtime send/launch", () => {
         }),
         runMutation: async (args) => {
           mutations.push([...args]);
+          return {
+            argv: ["orca"],
+            stdout: '{"ok":true}',
+            stderr: "",
+            exitCode: 0,
+            signal: null,
+            durationMs: 1,
+            timedOut: false,
+          };
         },
         runDraftCli: async (args) => {
           mutations.push([...args]);
