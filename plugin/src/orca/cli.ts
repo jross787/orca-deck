@@ -189,13 +189,14 @@ export async function runOrcaJson<T = unknown>(
   }
 }
 
-/** Read-only discovery commands used by Phase 0 polling. */
+/** Read-only discovery commands used by Phase 0/1 polling. */
 export const READ_ONLY_COMMANDS = {
   status: ["status"] as const,
   worktreePs: ["worktree", "ps"] as const,
   terminalList: ["terminal", "list"] as const,
   agentContext: ["agent-context"] as const,
-};
+  agentHooksStatus: ["agent", "hooks", "status"] as const,
+} as const;
 
 /** Mutation commands — never invoked by Phase 0 tooling. */
 export const MUTATION_COMMANDS = {

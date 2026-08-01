@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Orca Agent Deck</title>
+    <script src="sdpi-components.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0d10;
+        --panel: #12151a;
+        --ink: #f2f4f7;
+        --muted: #9aa3af;
+        --line: #2a313c;
+        --ready: #3dd68c;
+        --unavailable: #f5a524;
+        --incompatible: #c084fc;
+        --error: #f04438;
+        --accent: #5b8cff;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 12px/1.35 "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
+      }
+
+      .shell {
+        padding: 10px 12px 14px;
+        display: grid;
+        gap: 10px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 10px;
+      }
+
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+
+      .label {
+        color: var(--muted);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        font-size: 10px;
+      }
+
+      .title {
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .divider {
+        height: 1px;
+        background: var(--line);
+        margin: 8px 0;
+      }
+
+      .health {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .sonar {
+        --ring: var(--muted);
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--ring) 55%, transparent);
+        display: grid;
+        place-items: center;
+        position: relative;
+      }
+
+      .sonar::after {
+        content: "";
+        position: absolute;
+        inset: -4px;
+        border-radius: inherit;
+        border: 1px solid color-mix(in srgb, var(--ring) 35%, transparent);
+        opacity: 0.55;
+      }
+
+      .sonar[data-state="ready"] {
+        --ring: var(--ready);
+      }
+      .sonar[data-state="unavailable"] {
+        --ring: var(--unavailable);
+      }
+      .sonar[data-state="incompatible"] {
+        --ring: var(--incompatible);
+      }
+      .sonar[data-state="error"] {
+        --ring: var(--error);
+      }
+
+      .sonar-core {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--ring);
+      }
+
+      @media (prefers-reduced-motion: no-preference) {
+        .sonar[data-state="ready"]::after {
+          animation: sweep 2.4s linear infinite;
+        }
+      }
+
+      @keyframes sweep {
+        0% {
+          transform: scale(0.85);
+          opacity: 0.7;
+        }
+        70% {
+          transform: scale(1.15);
+          opacity: 0.15;
+        }
+        100% {
+          transform: scale(1.2);
+          opacity: 0;
+        }
+      }
+
+      .stack {
+        display: grid;
+        gap: 4px;
+      }
+
+      .state {
+        font-weight: 700;
+        letter-spacing: 0.03em;
+      }
+
+      .state[data-state="ready"] {
+        color: var(--ready);
+      }
+      .state[data-state="unavailable"] {
+        color: var(--unavailable);
+      }
+      .state[data-state="incompatible"] {
+        color: var(--incompatible);
+      }
+      .state[data-state="error"] {
+        color: var(--error);
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .field {
+        display: grid;
+        gap: 4px;
+        margin-top: 8px;
+      }
+
+      input[type="text"],
+      input[type="number"] {
+        width: 100%;
+        border: 1px solid var(--line);
+        background: #0a0c10;
+        color: var(--ink);
+        border-radius: 4px;
+        padding: 7px 8px;
+        font: inherit;
+      }
+
+      input:focus {
+        outline: 1px solid var(--accent);
+        border-color: var(--accent);
+      }
+
+      .actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      button {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: #171b22;
+        color: var(--ink);
+        border-radius: 4px;
+        padding: 7px 10px;
+        font: inherit;
+        cursor: pointer;
+      }
+
+      button.primary {
+        border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+        background: color-mix(in srgb, var(--accent) 18%, #171b22);
+      }
+
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .status-line {
+        min-height: 1.2em;
+        color: var(--muted);
+      }
+
+      .status-line[data-kind="error"] {
+        color: var(--error);
+      }
+
+      .status-line[data-kind="ok"] {
+        color: var(--ready);
+      }
+
+      .checks {
+        display: grid;
+        gap: 4px;
+        margin-top: 6px;
+      }
+
+      .check {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <section class="panel">
+        <div class="row">
+          <div class="title">Orca Agent Deck</div>
+          <div class="label">Health</div>
+        </div>
+        <div class="divider"></div>
+        <div class="health">
+          <div id="sonar" class="sonar" data-state="unavailable" aria-hidden="true">
+            <div class="sonar-core"></div>
+          </div>
+          <div class="stack">
+            <div id="healthState" class="state" data-state="unavailable">UNAVAILABLE</div>
+            <div id="healthDetail" class="muted">Waiting for plugin snapshot.</div>
+          </div>
+        </div>
+        <div id="healthChecks" class="checks muted"></div>
+      </section>
+
+      <section class="panel">
+        <div class="row">
+          <div class="title">Config</div>
+          <div class="label">External JSON authority</div>
+        </div>
+        <div class="divider"></div>
+        <div class="muted" id="configPath">~/Library/Application Support/Orca Agent Deck/config.json</div>
+
+        <label class="field">
+          <span class="label">Orca executable</span>
+          <input id="orcaExecutable" type="text" spellcheck="false" autocomplete="off" placeholder="orca" />
+        </label>
+
+        <label class="field">
+          <span class="label">CLI timeout (ms)</span>
+          <input id="cliTimeoutMs" type="number" min="1000" max="60000" step="500" />
+        </label>
+
+        <label class="field">
+          <span class="label">Hold-to-close (ms)</span>
+          <input id="holdToCloseMs" type="number" min="500" max="10000" step="100" />
+        </label>
+
+        <div class="divider"></div>
+        <div class="actions">
+          <button id="reloadBtn" type="button">Reload config</button>
+          <button id="saveBtn" class="primary" type="button">Save config</button>
+          <button id="refreshHealthBtn" type="button">Refresh health</button>
+        </div>
+        <div id="statusLine" class="status-line" role="status"></div>
+      </section>
+    </div>
+
+    <script>
+      const { streamDeckClient } = SDPIComponents;
+
+      const els = {
+        sonar: document.getElementById("sonar"),
+        healthState: document.getElementById("healthState"),
+        healthDetail: document.getElementById("healthDetail"),
+        healthChecks: document.getElementById("healthChecks"),
+        configPath: document.getElementById("configPath"),
+        orcaExecutable: document.getElementById("orcaExecutable"),
+        cliTimeoutMs: document.getElementById("cliTimeoutMs"),
+        holdToCloseMs: document.getElementById("holdToCloseMs"),
+        reloadBtn: document.getElementById("reloadBtn"),
+        saveBtn: document.getElementById("saveBtn"),
+        refreshHealthBtn: document.getElementById("refreshHealthBtn"),
+        statusLine: document.getElementById("statusLine"),
+      };
+
+      /** @type {Record<string, { kind: string }>} */
+      const pending = Object.create(null);
+
+      function requestId() {
+        return `pi_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      }
+
+      function setStatus(message, kind) {
+        els.statusLine.textContent = message || "";
+        if (kind) els.statusLine.dataset.kind = kind;
+        else delete els.statusLine.dataset.kind;
+      }
+
+      function send(message) {
+        const id = message.requestId || requestId();
+        const payload = { ...message, requestId: id };
+        pending[id] = { kind: payload.type };
+        streamDeckClient.send("sendToPlugin", payload);
+        return id;
+      }
+
+      function applyConfig(config, path) {
+        if (path) els.configPath.textContent = path;
+        els.orcaExecutable.value = config.orcaExecutable ?? "";
+        els.cliTimeoutMs.value = String(config.cliTimeoutMs ?? 8000);
+        els.holdToCloseMs.value = String(config.holdToCloseMs ?? 1500);
+      }
+
+      function applyHealth(health) {
+        const state = health?.state || "unavailable";
+        els.sonar.dataset.state = state;
+        els.healthState.dataset.state = state;
+        els.healthState.textContent = String(state).toUpperCase();
+        els.healthDetail.textContent = health?.detail || "No health detail.";
+        const checks = Array.isArray(health?.checks) ? health.checks : [];
+        els.healthChecks.innerHTML = checks
+          .map((c) => {
+            const label = c.label || c.id || "check";
+            const value = c.ok === true ? "ok" : c.ok === false ? "fail" : "n/a";
+            return `<div class="check"><span>${label}</span><span>${value}</span></div>`;
+          })
+          .join("");
+      }
+
+      streamDeckClient.sendToPropertyInspector.subscribe(({ payload }) => {
+        if (!payload || typeof payload !== "object") return;
+        const id = payload.requestId;
+        if (id && pending[id]) delete pending[id];
+        else if (id && Object.keys(pending).length) {
+          // Ignore stale replies after a rapid inspector switch.
+          return;
+        }
+
+        switch (payload.type) {
+          case "config.snapshot":
+            applyConfig(payload.config || {}, payload.path);
+            setStatus("Loaded config snapshot.", "ok");
+            break;
+          case "config.saved":
+            applyConfig(payload.config || {}, payload.path);
+            setStatus("Saved config.", "ok");
+            break;
+          case "health.snapshot":
+            applyHealth(payload.health || {});
+            setStatus("Health refreshed.", "ok");
+            break;
+          case "error":
+            setStatus(payload.message || payload.code || "Request failed.", "error");
+            break;
+          default:
+            break;
+        }
+      });
+
+      els.reloadBtn.addEventListener("click", () => {
+        setStatus("Loading config…");
+        send({ type: "config.get" });
+      });
+
+      els.saveBtn.addEventListener("click", () => {
+        const cliTimeoutMs = Number(els.cliTimeoutMs.value);
+        const holdToCloseMs = Number(els.holdToCloseMs.value);
+        setStatus("Saving config…");
+        send({
+          type: "config.patch",
+          patch: {
+            orcaExecutable: els.orcaExecutable.value.trim() || undefined,
+            cliTimeoutMs,
+            holdToCloseMs,
+          },
+        });
+      });
+
+      els.refreshHealthBtn.addEventListener("click", () => {
+        setStatus("Refreshing health…");
+        send({ type: "health.refresh" });
+      });
+
+      // Initial pull once the inspector is visible.
+      send({ type: "config.get" });
+      send({ type: "health.refresh" });
+    </script>
+  </body>
+</html>
