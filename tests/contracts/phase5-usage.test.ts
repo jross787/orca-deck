@@ -25,6 +25,9 @@ import { DashboardRuntime } from "../../plugin/src/state/runtime.js";
 import {
   assertSafeDiagnostics,
   buildDiagnosticsExport,
+  opaqueSessionToken,
+  sanitizeDetailCode,
+  stringEmbedsFilesystemPath,
 } from "../../plugin/src/usage/diagnostics.js";
 import {
   countActiveOmp,
@@ -405,21 +408,65 @@ describe("PI protocol polish", () => {
 });
 
 describe("diagnostics redaction", () => {
-  it("export omits prompts presets draft handles paths", () => {
+  it("export omits prompts presets draft handles paths and raw session ids", () => {
     const cfg = defaultConfig();
     cfg.presets.omp = ["SECRET PRESET BODY", "b", "c", "d"];
+    const pathBearingId = "repo-id::/Users/frank/secret-project:tab:leaf";
     const exp = buildDiagnosticsExport({
       config: cfg,
       configSource: "file",
       configLastError: undefined,
       health: {
-        state: "ready",
-        detail: "ok",
+        state: "error",
+        detail: "spawn /Users/x/bin/orca ENOENT",
         checkedAt: "2026-08-01T00:00:00.000Z",
         schemaVersion: "x",
-        checks: [{ id: "status", label: "status", ok: true, detail: "ready" }],
+        checks: [
+          {
+            id: "status",
+            label: "status",
+            ok: false,
+            detail: "spawn /home/x/.local/bin/orca failed",
+          },
+        ],
       },
-      dashboard: null,
+      dashboard: {
+        capturedAtMs: 1,
+        orcaReady: true,
+        cards: [],
+        slots: [],
+        hidden: [],
+        metaById: {},
+        selectedLogicalSessionId: pathBearingId,
+        alerts: [],
+        control: {
+          selectedLogicalSessionId: pathBearingId,
+          selectedCard: null,
+          nextTargetId: null,
+          overflowCount: 0,
+          focusHighlighted: false,
+          focusEnabled: false,
+          ackEnabled: false,
+          mutationEnabled: false,
+          presetKey: "unknown",
+          presetsEnabled: false,
+          retryEnabled: false,
+          retryDetail: "FOCUS REQUIRED",
+          interruptEnabled: false,
+          structuredReplyEnabled: false,
+          structuredReplyDetail: "REPLY UNAVAILABLE",
+          draftOpen: false,
+          draftUi: "empty",
+          draftCharacters: 0,
+          draftReady: false,
+          draftAmbiguous: false,
+          draftDetail: "open",
+          newAgentEnabled: false,
+          orcaReady: true,
+          urgency: "empty",
+          issues: ["ambiguous_join:repo-id::/Users/frank/secret-project:tab:leaf:count=2"],
+        },
+      },
       usage: buildUsageSnapshot({
         sessions: [],
         selectedLogicalSessionId: null,
@@ -433,16 +480,54 @@ describe("diagnostics redaction", () => {
     const raw = JSON.stringify(exp);
     assert.equal(raw.includes("SECRET PRESET BODY"), false);
     assert.equal(raw.includes("/Users/"), false);
+    assert.equal(raw.includes("/home/"), false);
+    assert.equal(raw.includes(pathBearingId), false);
+    assert.equal(raw.includes("secret-project"), false);
     assert.equal("presets" in (exp.configFlags ?? {}), false);
+    assert.equal("selectedLogicalSessionId" in (exp.dashboard ?? {}), false);
+    assert.equal(exp.dashboard?.selectedSessionToken, opaqueSessionToken(pathBearingId));
+    assert.equal(exp.health?.detailCode, "spawn_failed");
+    assert.equal(exp.health?.checks[0]?.detailCode, "spawn_failed");
     assert.ok(exp.configFlags?.presetSlotCounts.omp === 4);
   });
 
-  it("assertSafeDiagnostics rejects path leaks", () => {
+  it("assertSafeDiagnostics rejects embedded macOS and Linux user paths", () => {
+    assert.equal(stringEmbedsFilesystemPath("repo-id::/Users/frank/secret-project:tab:leaf"), true);
+    assert.equal(stringEmbedsFilesystemPath("spawn /Users/x/bin/orca ENOENT"), true);
+    assert.equal(stringEmbedsFilesystemPath("spawn /home/x/.local/bin/orca failed"), true);
+    assert.equal(stringEmbedsFilesystemPath("Library/Application Support/Orca"), true);
+    assert.equal(stringEmbedsFilesystemPath("ready"), false);
+
     assert.throws(() =>
       assertSafeDiagnostics({
-        path: "/Users/frank/secret",
+        note: "repo-id::/Users/frank/secret-project:tab:leaf",
       }),
     );
+    assert.throws(() =>
+      assertSafeDiagnostics({
+        err: "spawn /Users/x/bin/orca ENOENT",
+      }),
+    );
+    assert.throws(() =>
+      assertSafeDiagnostics({
+        err: "spawn /home/x/.local/bin/orca failed",
+      }),
+    );
+    // Must not require logging the rejected content — throw message is key-path only.
+    try {
+      assertSafeDiagnostics({ leak: "/Users/frank/secret" });
+      assert.fail("expected throw");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      assert.equal(msg.includes("/Users/frank/secret"), false);
+      assert.match(msg, /filesystem path/);
+    }
+  });
+
+  it("sanitizeDetailCode never returns path-bearing input", () => {
+    assert.equal(sanitizeDetailCode("spawn /Users/x/bin/orca ENOENT"), "spawn_failed");
+    assert.equal(sanitizeDetailCode("spawn /home/x/bin/orca failed"), "spawn_failed");
+    assert.equal(stringEmbedsFilesystemPath(sanitizeDetailCode("spawn /Users/x/bin/orca ENOENT")), false);
   });
 });
 

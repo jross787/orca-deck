@@ -4,6 +4,7 @@
  * draft text, terminal content, handles, filesystem paths, or secrets.
  */
 
+import { createHash } from "node:crypto";
 import type { DeckConfig } from "../config/store.js";
 import type { HealthSnapshot } from "../health/check.js";
 import type { DashboardSnapshot } from "../state/types.js";
@@ -21,23 +22,25 @@ export type DiagnosticsExport = {
   };
   health?: {
     state: string;
-    detail: string;
+    /** Safe reason code — never free-form CLI/err text. */
+    detailCode: string;
     checkedAt: string;
     schemaVersion: string;
     orcaAppVersion?: string;
     runtimeId?: string;
     runtimeState?: string;
-    checks: Array<{ id: string; ok: boolean | null; detail: string }>;
-    blockers?: Array<{ id: string; severity: string; message: string }>;
+    checks: Array<{ id: string; ok: boolean | null; detailCode: string }>;
+    blockers?: Array<{ id: string; severity: string; messageCode: string }>;
   };
   dashboard?: {
     orcaReady: boolean;
     capturedAtMs: number;
     cardCount: number;
     overflowCount: number;
-    selectedLogicalSessionId: string | null;
+    /** Non-reversible opaque token when a session is selected; never raw logical id. */
+    selectedSessionToken: string | null;
     urgency: string;
-    issues: string[];
+    issueCodes: string[];
     agentTypeCounts: Record<string, number>;
   };
   usage?: {
@@ -96,7 +99,31 @@ const FORBIDDEN_DIAG_KEYS = new Set([
   "statePath",
   "supportDir",
   "home",
+  "selectedLogicalSessionId",
+  "logicalSessionId",
+  "detail",
+  "message",
 ]);
+
+/** Absolute user-home paths embedded anywhere in a string (macOS/Linux). */
+const EMBEDDED_USER_PATH =
+  /(?:^|[\s"'`:=,(\[{])(?:\/Users\/|\/home\/)[^\s"'`)\]},;]*/i;
+
+const APP_SUPPORT_PATH = /Library\/Application Support/i;
+
+/**
+ * True when a string embeds a macOS/Linux absolute user path or App Support path.
+ * Does not log or echo the value.
+ */
+export function stringEmbedsFilesystemPath(value: string): boolean {
+  if (APP_SUPPORT_PATH.test(value)) return true;
+  if (EMBEDDED_USER_PATH.test(value)) return true;
+  // Bare absolute user roots (value is exactly/starts with path).
+  if (value.startsWith("/Users/") || value.startsWith("/home/")) return true;
+  // Mid-string without whitespace delimiter (logical ids: repo::/Users/...:tab:leaf).
+  if (value.includes("/Users/") || value.includes("/home/")) return true;
+  return false;
+}
 
 export function assertSafeDiagnostics(value: unknown, path = ""): void {
   if (value == null) return;
@@ -107,22 +134,20 @@ export function assertSafeDiagnostics(value: unknown, path = ""): void {
   if (typeof value === "object") {
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
       if (FORBIDDEN_DIAG_KEYS.has(k)) {
-        throw new Error(`diagnostics contains forbidden key: ${path}.${k}`);
+        throw new Error(`diagnostics contains forbidden key at ${path || "<root>"}`);
       }
-      if (/prompt|draft|stdout|stderr|toolinput|preview|handle|secret|password|apiKey/i.test(k)) {
-        throw new Error(`diagnostics contains content-bearing key: ${path}.${k}`);
+      if (/prompt|draft|stdout|stderr|toolinput|preview|handle|secret|password|apiKey|logicalSessionId/i.test(k)) {
+        throw new Error(`diagnostics contains content-bearing key at ${path || "<root>"}`);
       }
-      // Reject absolute filesystem paths as string values.
-      if (
-        typeof v === "string" &&
-        (v.startsWith("/Users/") ||
-          v.startsWith("/home/") ||
-          v.includes("Library/Application Support"))
-      ) {
-        throw new Error(`diagnostics leaked filesystem path at ${path}.${k}`);
+      if (typeof v === "string" && stringEmbedsFilesystemPath(v)) {
+        throw new Error(`diagnostics leaked filesystem path at ${path || "<root>"}.${k}`);
       }
       assertSafeDiagnostics(v, path ? `${path}.${k}` : k);
     }
+    return;
+  }
+  if (typeof value === "string" && stringEmbedsFilesystemPath(value)) {
+    throw new Error(`diagnostics leaked filesystem path at ${path || "<root>"}`);
   }
 }
 
@@ -132,6 +157,37 @@ function configErrorClass(err: string | undefined): string | undefined {
   if (/valid/i.test(err)) return "validation_failed";
   if (/parse|JSON/i.test(err)) return "parse_failed";
   return "config_error";
+}
+
+/**
+ * Map free-form health/CLI text to a short reason code.
+ * Never returns the original string (may contain paths).
+ */
+export function sanitizeDetailCode(raw: string | undefined | null): string {
+  if (raw == null || raw.length === 0) return "none";
+  // Prefer spawn classification when both spawn + ENOENT appear (common CLI path errors).
+  if (/spawn/i.test(raw)) return "spawn_failed";
+  if (/ENOENT|not found|no such file/i.test(raw)) return "not_found";
+  if (/EACCES|permission/i.test(raw)) return "permission_denied";
+  if (/timeout|ETIMEDOUT/i.test(raw)) return "timeout";
+  if (/invalid json|JSON/i.test(raw)) return "invalid_json";
+  if (/incompatible/i.test(raw)) return "incompatible";
+  if (/unavailable|not ready|unreachable/i.test(raw)) return "unavailable";
+  if (/ready|ok\b/i.test(raw) && raw.length < 80) return "ok";
+  if (/missing/i.test(raw)) return "missing";
+  if (/blocked/i.test(raw)) return "blocked";
+  return "error";
+}
+/** Non-reversible stable opaque token for a logical session id. */
+export function opaqueSessionToken(logicalSessionId: string): string {
+  return createHash("sha256").update(logicalSessionId, "utf8").digest("hex").slice(0, 16);
+}
+
+function sanitizeIssueCode(issue: string): string {
+  // Prefer the prefix before the first path-ish segment.
+  const head = issue.split(/[/:]/)[0] ?? "issue";
+  if (/^[a-z0-9_.-]+$/i.test(head) && head.length <= 64) return head;
+  return sanitizeDetailCode(issue);
 }
 
 export function buildDiagnosticsExport(input: {
@@ -186,7 +242,7 @@ export function buildDiagnosticsExport(input: {
     const h = input.health;
     exp.health = {
       state: h.state,
-      detail: h.detail,
+      detailCode: sanitizeDetailCode(h.detail),
       checkedAt: h.checkedAt,
       schemaVersion: h.schemaVersion,
       orcaAppVersion: h.orcaAppVersion,
@@ -195,26 +251,27 @@ export function buildDiagnosticsExport(input: {
       checks: h.checks.map((c) => ({
         id: c.id,
         ok: c.ok,
-        detail: c.detail,
+        detailCode: sanitizeDetailCode(c.detail),
       })),
       blockers: h.capability?.blockers?.map((b) => ({
         id: b.id,
         severity: b.severity,
-        message: b.message,
+        messageCode: sanitizeDetailCode(b.message),
       })),
     };
   }
 
   if (input.dashboard) {
     const d = input.dashboard;
+    const selected = d.selectedLogicalSessionId;
     exp.dashboard = {
       orcaReady: d.orcaReady,
       capturedAtMs: d.capturedAtMs,
       cardCount: d.cards.length,
       overflowCount: d.control.overflowCount,
-      selectedLogicalSessionId: d.selectedLogicalSessionId,
+      selectedSessionToken: selected ? opaqueSessionToken(selected) : null,
       urgency: d.control.urgency,
-      issues: [...d.control.issues],
+      issueCodes: d.control.issues.map(sanitizeIssueCode),
       agentTypeCounts,
     };
   }
