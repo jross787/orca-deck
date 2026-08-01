@@ -76,10 +76,14 @@ export class DashboardRuntime {
   private demand = 0;
   private ready: Promise<void>;
   private persistTimer: NodeJS.Timeout | null = null;
+  /** Shared in-flight refresh — all concurrent callers await the same tick. */
+  private refreshInFlight: Promise<DashboardSnapshot> | null = null;
 
   constructor(deps: DashboardRuntimeDeps) {
     this.deps = deps;
-    this.metadata = deps.metadataStore ?? new MetadataStore({ paths: deps.configStore.paths });
+    this.metadata =
+      deps.metadataStore ??
+      new MetadataStore({ paths: deps.configStore.paths, logger: deps.logger });
     const cfg = deps.configStore.getConfig();
     this.alerts =
       deps.alertEngine ??
@@ -90,9 +94,8 @@ export class DashboardRuntime {
     this.state = createInitialDashboardState(cfg.stuckThresholdMinutes);
     this.snapshot = selectDashboardSnapshot(this.state, deps.nowMs?.() ?? Date.now());
 
-    const intervals = this.readIntervals();
     this.scheduler = new PollScheduler({
-      intervals,
+      getIntervals: () => this.readIntervals(),
       onTick: async () => {
         await this.refresh();
       },
@@ -104,7 +107,6 @@ export class DashboardRuntime {
   private async bootstrap(): Promise<void> {
     const persisted = await this.metadata.load();
     this.state = reduceDashboard(this.state, { type: "hydrate", persisted });
-    // Rehydrate alert dedupe from metadata.
     for (const [id, meta] of Object.entries(persisted.sessions)) {
       if (meta.lastAlertEvent) this.alerts.markEmitted(id, meta.lastAlertEvent);
     }
@@ -143,6 +145,11 @@ export class DashboardRuntime {
 
   getStateForTests(): DashboardState {
     return this.state;
+  }
+
+  /** Test/helper: force scheduler to re-read intervals after config patch. */
+  notifyConfigChanged(): void {
+    this.scheduler.touchIntervals();
   }
 
   subscribe(listener: Listener): () => void {
@@ -192,8 +199,18 @@ export class DashboardRuntime {
 
   async refresh(): Promise<DashboardSnapshot> {
     await this.ready;
+    if (this.refreshInFlight) return this.refreshInFlight;
+    this.refreshInFlight = this.runRefresh().finally(() => {
+      this.refreshInFlight = null;
+    });
+    return this.refreshInFlight;
+  }
+
+  private async runRefresh(): Promise<DashboardSnapshot> {
     const cfg = this.deps.configStore.getConfig();
     this.alerts.setEnabled(cfg.soundEnabled);
+    // Honor latest polling intervals after load/patch.
+    this.scheduler.touchIntervals();
 
     const refreshFn = this.deps.refresh ?? refreshDiscovery;
     const opts: DiscoveryRefreshOptions = {
@@ -204,14 +221,18 @@ export class DashboardRuntime {
     const result = await refreshFn(opts);
     const nowMs = this.now();
 
+    // Failed/incomplete discovery must not invent identity-lost from empty sessions.
+    const topologyReliable = result.ok === true;
+
     this.state = reduceDashboard(this.state, {
       type: "refresh",
       source: {
-        sessions: result.snapshot.sessions,
+        sessions: topologyReliable ? result.snapshot.sessions : [],
         orcaReady: result.snapshot.orcaReady,
         runtimeId: result.snapshot.runtimeId,
         issues: result.snapshot.issues,
         capturedAtMs: result.snapshot.capturedAtMs,
+        topologyReliable,
       },
       stuckThresholdMinutes: cfg.stuckThresholdMinutes,
       nowMs,
@@ -254,7 +275,6 @@ export class DashboardRuntime {
 
   async selectSession(logicalSessionId: string): Promise<DashboardSnapshot> {
     await this.ready;
-    // Selection never focuses or acknowledges.
     this.state = reduceDashboard(this.state, { type: "select", logicalSessionId });
     this.snapshot = selectDashboardSnapshot(this.state, this.now());
     this.schedulePersist();
@@ -313,7 +333,6 @@ export class DashboardRuntime {
       return this.snapshot;
     }
 
-    // Refresh/rejoin before mutation — never use a remembered handle.
     await this.refresh();
     const session = this.findLiveSession(selectedId);
     const gate = checkMutationPreconditions({
@@ -322,9 +341,11 @@ export class DashboardRuntime {
       orcaReady: this.snapshot.orcaReady,
     });
     if (!gate.ok || !session?.runtimeHandle) {
-      this.deps.logger.warn("focus_blocked", {
-        code: gate.ok ? "missing_handle" : gate.code,
-      }, { ids: { logicalSessionId: selectedId } });
+      this.deps.logger.warn(
+        "focus_blocked",
+        { code: gate.ok ? "missing_handle" : gate.code },
+        { ids: { logicalSessionId: selectedId } },
+      );
       await this.flashControls("focus", false);
       await this.refresh();
       return this.snapshot;
@@ -360,7 +381,7 @@ export class DashboardRuntime {
 
   stop(): void {
     this.scheduler.stop();
-    if (this.persistTimer) {
+    if (this.persistTimer != null) {
       clearTimeout(this.persistTimer);
       this.persistTimer = null;
     }
@@ -379,7 +400,13 @@ export class DashboardRuntime {
   private schedulePersist(): void {
     if (this.persistTimer != null) clearTimeout(this.persistTimer);
     this.persistTimer = setTimeout(() => {
-      void this.metadata.save(toPersistedState(this.state)).catch(() => undefined);
+      void this.metadata
+        .save(toPersistedState(this.state))
+        .catch((err) => {
+          this.deps.logger.error("metadata_persist_failed", {
+            code: err instanceof Error ? err.name : "error",
+          });
+        });
     }, 50);
     this.persistTimer.unref?.();
   }

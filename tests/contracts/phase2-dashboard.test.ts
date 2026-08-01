@@ -123,14 +123,21 @@ function session(partial: Partial<LogicalSession> & Pick<LogicalSession, "logica
   };
 }
 
-function refresh(state: DashboardState, sessions: LogicalSession[], nowMs: number, stuck = 60): DashboardState {
+function refresh(
+  state: DashboardState,
+  sessions: LogicalSession[],
+  nowMs: number,
+  stuck = 60,
+  opts: { orcaReady?: boolean; topologyReliable?: boolean; issues?: string[] } = {},
+): DashboardState {
   return reduceDashboard(state, {
     type: "refresh",
     source: {
       sessions,
-      orcaReady: true,
+      orcaReady: opts.orcaReady ?? true,
       capturedAtMs: nowMs,
-      issues: [],
+      issues: opts.issues ?? [],
+      topologyReliable: opts.topologyReliable ?? true,
     },
     stuckThresholdMinutes: stuck,
     nowMs,
@@ -840,5 +847,301 @@ describe("manifest actions and layout", () => {
       const buf = await readFile(path.join(BUNDLE, rel));
       assert.ok(buf.byteLength > 0, rel);
     }
+  });
+});
+
+
+describe("failed refresh does not invent identity-lost", () => {
+  it("keeps live sessions and only updates readiness/issues when topology unreliable", () => {
+    let state = createInitialDashboardState(60);
+    const s = session({
+      logicalSessionId: "wt:p",
+      worktreeId: "wt",
+      paneKey: "p",
+      state: "working",
+      rawState: "working",
+      stateStartedAt: 1,
+    });
+    state = refresh(state, [s], 10);
+    assert.equal(selectDashboardSnapshot(state, 10).cards[0]!.cardState, "working");
+
+    state = refresh(state, [], 20, 60, {
+      orcaReady: false,
+      topologyReliable: false,
+      issues: ["discovery_incomplete"],
+    });
+    const snap = selectDashboardSnapshot(state, 20);
+    assert.equal(snap.orcaReady, false);
+    assert.ok(snap.control.issues.includes("discovery_incomplete"));
+    assert.equal(snap.cards.length, 1);
+    assert.equal(snap.cards[0]!.logicalSessionId, "wt:p");
+    // Presentation overlays unavailable; identity not lost.
+    assert.equal(snap.cards[0]!.cardState, "unavailable");
+    assert.notEqual(snap.cards[0]!.cardState, "identity_lost");
+    assert.equal(state.ghosts.size, 0);
+    assert.equal(state.liveById.has("wt:p"), true);
+  });
+});
+
+describe("attention ranks unread identity_lost including overflow", () => {
+  it("includes unread identity_lost between disconnected and working", () => {
+    const cards = [
+      card({
+        logicalSessionId: "lost-hidden",
+        cardState: "identity_lost",
+        unread: true,
+        slot: null,
+        visible: false,
+        eventVersion: { logicalSessionId: "lost-hidden", state: "identity_lost", stateStartedAt: 5 },
+        updatedAt: 5,
+      }),
+      card({
+        logicalSessionId: "disc",
+        cardState: "disconnected",
+        unread: false,
+        updatedAt: 9,
+      }),
+      card({
+        logicalSessionId: "work",
+        cardState: "working",
+        unread: false,
+        updatedAt: 99,
+      }),
+    ];
+    const ranked = rankAttentionTargets(cards);
+    assert.deepEqual(
+      ranked.map((r) => r.logicalSessionId),
+      ["disc", "lost-hidden", "work"],
+    );
+    assert.equal(pickNextAttention(cards, null), "disc");
+    assert.equal(pickNextAttention(cards, "disc"), "lost-hidden");
+  });
+});
+
+describe("hydrate preserves unacked ghosts on first reliable refresh", () => {
+  it("resurrects persisted slotted missing session as identity_lost until ack", () => {
+    let state = createInitialDashboardState(60);
+    const live = session({
+      logicalSessionId: "wt:keep",
+      worktreeId: "wt",
+      paneKey: "keep",
+      state: "done",
+      rawState: "done",
+      stateStartedAt: 1,
+    });
+    state = refresh(state, [live], 10);
+    state = reduceDashboard(state, { type: "select", logicalSessionId: "wt:keep" });
+    // Simulate disappearance before restart.
+    state = refresh(state, [], 20);
+    assert.equal(selectDashboardSnapshot(state, 20).cards[0]!.cardState, "identity_lost");
+    const persisted = toPersistedState(state);
+    assert.ok(persisted.ghosts && Object.keys(persisted.ghosts).length >= 1);
+    assert.ok(persisted.sessions["wt:keep"]?.ghostLabel || persisted.ghosts?.["wt:keep"]);
+
+    // Fresh process: hydrate then first reliable refresh with no sessions.
+    let restarted = createInitialDashboardState(60);
+    restarted = reduceDashboard(restarted, { type: "hydrate", persisted });
+    assert.equal(restarted.ghosts.size, 0); // ghosts rebuilt on first reliable refresh
+    restarted = refresh(restarted, [], 30);
+    const snap = selectDashboardSnapshot(restarted, 30);
+    const lost = snap.cards.find((c) => c.logicalSessionId === "wt:keep");
+    assert.ok(lost);
+    assert.equal(lost!.cardState, "identity_lost");
+    assert.equal(lost!.unread, true);
+    assert.equal(lost!.slot, 0);
+    assert.equal(lost!.repo.length > 0, true);
+
+    restarted = reduceDashboard(restarted, {
+      type: "acknowledge",
+      logicalSessionId: "wt:keep",
+      nowMs: 40,
+    });
+    assert.equal(
+      selectDashboardSnapshot(restarted, 40).cards.find((c) => c.logicalSessionId === "wt:keep"),
+      undefined,
+    );
+  });
+});
+
+describe("runtime refresh coalescing", () => {
+  it("shares one in-flight discovery among concurrent callers", async () => {
+    const { DashboardRuntime } = await import("../../plugin/src/state/runtime.js");
+    const { ConfigStore } = await import("../../plugin/src/config/store.js");
+    const { RedactedLogger } = await import("../../plugin/src/diagnostics/logger.js");
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "orca-deck-coalesce-"));
+    try {
+      const paths = resolveConfigPaths(tmp);
+      const configStore = new ConfigStore({ paths, watch: false });
+      await configStore.load();
+      const logger = new RedactedLogger({
+        logPath: path.join(tmp, "p.log"),
+        sink: async () => undefined,
+      });
+      let calls = 0;
+      let release!: () => void;
+      const gate = new Promise<void>((r) => {
+        release = r;
+      });
+      const runtime = new DashboardRuntime({
+        configStore,
+        logger,
+        metadataStore: new MetadataStore({ paths }),
+        alertEngine: new AlertEngine({ enabled: false, platform: "linux" }),
+        refresh: async () => {
+          calls += 1;
+          await gate;
+          return {
+            ok: true,
+            durationMs: 1,
+            snapshot: {
+              capturedAtMs: Date.now(),
+              orcaReady: true,
+              capabilities: [],
+              ignoredShellCount: 0,
+              ambiguousCount: 0,
+              issues: [],
+              sessions: [
+                session({
+                  logicalSessionId: "wt:c",
+                  worktreeId: "wt",
+                  paneKey: "c",
+                  state: "idle",
+                  rawState: "idle",
+                  stateStartedAt: 1,
+                }),
+              ],
+            },
+          };
+        },
+      });
+      await runtime.whenReady();
+      const p1 = runtime.refresh();
+      const p2 = runtime.refresh();
+      const p3 = runtime.refresh();
+      release();
+      const [a, b, c] = await Promise.all([p1, p2, p3]);
+      assert.equal(calls, 1);
+      assert.equal(a.cards.length, 1);
+      assert.equal(b.cards[0]?.logicalSessionId, "wt:c");
+      assert.equal(c.cards[0]?.logicalSessionId, "wt:c");
+      runtime.stop();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("scheduler honors loaded config intervals", () => {
+  it("re-reads intervals via getter after config change", async () => {
+    let intervals = { workingMs: 2000, idleMs: 3000, unavailableMs: 10000, backoffCapMs: 30000 };
+    // dynamic import already available via top-level imports
+    const { PollScheduler: PS } = await import("../../plugin/src/state/scheduler.js");
+    const sched = new PS({
+      getIntervals: () => intervals,
+      onTick: async () => undefined,
+    });
+    sched.setUrgency("working");
+    assert.equal(sched.currentIntervalMs(), 2000);
+    intervals = { ...intervals, workingMs: 1500, idleMs: 4000 };
+    assert.equal(sched.currentIntervalMs(), 1500);
+    sched.setUrgency("idle");
+    assert.equal(sched.currentIntervalMs(), 4000);
+  });
+});
+
+describe("metadata key-only content guard", () => {
+  it("allows repo ids containing prompt substring and rejects forbidden keys", () => {
+    const ok = {
+      schemaVersion: 1 as const,
+      selectedLogicalSessionId: "prompt-toolkit::main:tab:leaf",
+      slotByLogicalId: { "prompt-toolkit::main:tab:leaf": 0 },
+      sessions: {
+        "prompt-toolkit::main:tab:leaf": {
+          ackedEvent: null,
+          unreadEvent: null,
+          worktreeUnreadSeeded: false,
+          stateChangedAt: 1,
+          workingSince: null,
+          lastAlertEvent: null,
+          lastAlertAt: null,
+        },
+      },
+      ghosts: {},
+      suppressedClosedIds: [],
+    };
+    assert.doesNotThrow(() => assertNoHandlesInPersisted(ok));
+    assert.throws(() => {
+      const bad = JSON.parse(JSON.stringify(ok)) as typeof ok & { sessions: Record<string, Record<string, unknown>> };
+      bad.sessions["x"] = { ...ok.sessions["prompt-toolkit::main:tab:leaf"]!, runtimeHandle: "nope" };
+      assertNoHandlesInPersisted(bad as typeof ok);
+    });
+  });
+});
+
+describe("acked closed missing_terminal stays suppressed", () => {
+  it("does not reseed closed after ack while still listed missing_terminal", () => {
+    let state = createInitialDashboardState(60);
+    const live = session({
+      logicalSessionId: "wt:gone",
+      worktreeId: "wt",
+      paneKey: "gone",
+      state: "working",
+      rawState: "working",
+      stateStartedAt: 1,
+      joinHealth: "ok",
+    });
+    state = refresh(state, [live], 10);
+    const missing = {
+      ...live,
+      joinHealth: "missing_terminal" as const,
+      runtimeHandle: undefined,
+      connected: false,
+      writable: false,
+    };
+    state = refresh(state, [missing], 20);
+    let snap = selectDashboardSnapshot(state, 20);
+    assert.equal(snap.cards[0]!.cardState, "closed");
+    assert.equal(snap.cards[0]!.unread, true);
+
+    state = reduceDashboard(state, { type: "acknowledge", logicalSessionId: "wt:gone", nowMs: 30 });
+    snap = selectDashboardSnapshot(state, 30);
+    assert.equal(snap.cards.find((c) => c.logicalSessionId === "wt:gone"), undefined);
+
+    // Still listed missing_terminal — must stay suppressed.
+    state = refresh(state, [missing], 40);
+    snap = selectDashboardSnapshot(state, 40);
+    assert.equal(snap.cards.find((c) => c.logicalSessionId === "wt:gone"), undefined);
+    assert.ok(state.suppressedClosedIds.has("wt:gone"));
+
+    // Full disappearance clears suppression; new appearance is a new lifecycle.
+    state = refresh(state, [], 50);
+    assert.equal(state.suppressedClosedIds.has("wt:gone"), false);
+  });
+
+  it("first-observed missing_terminal uses closed-ghost lifecycle", () => {
+    let state = createInitialDashboardState(60);
+    const missing = session({
+      logicalSessionId: "wt:first",
+      worktreeId: "wt",
+      paneKey: "first",
+      state: "done",
+      rawState: "done",
+      stateStartedAt: 1,
+      joinHealth: "missing_terminal",
+      runtimeHandle: undefined,
+      connected: false,
+      writable: false,
+    });
+    state = refresh(state, [missing], 10);
+    const snap = selectDashboardSnapshot(state, 10);
+    assert.equal(snap.cards[0]!.cardState, "closed");
+    assert.equal(snap.cards[0]!.unread, true);
+    assert.ok(state.ghosts.has("wt:first"));
+    state = reduceDashboard(state, { type: "acknowledge", logicalSessionId: "wt:first", nowMs: 20 });
+    state = refresh(state, [missing], 30);
+    assert.equal(
+      selectDashboardSnapshot(state, 30).cards.find((c) => c.logicalSessionId === "wt:first"),
+      undefined,
+    );
   });
 });

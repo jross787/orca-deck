@@ -1,6 +1,7 @@
 /**
  * Shared poll scheduler for the dashboard.
  * One loop serves every action instance — never per-key polling.
+ * Intervals are read via getter on each reschedule so config patches apply.
  */
 
 export type SchedulerUrgency = "working" | "idle" | "empty" | "failure";
@@ -13,10 +14,12 @@ export type SchedulerIntervals = {
 };
 
 export type SchedulerOptions = {
-  intervals: SchedulerIntervals;
+  /** Static intervals (tests). Prefer getIntervals for live config. */
+  intervals?: SchedulerIntervals;
+  /** Dynamic intervals from config store — re-read each reschedule. */
+  getIntervals?: () => SchedulerIntervals;
   /** Invoked on each tick; may be async. Overlapping ticks coalesce. */
   onTick: () => void | Promise<void>;
-  /** Test seam. */
   nowMs?: () => number;
   setTimer?: (fn: () => void, ms: number) => NodeJS.Timeout;
   clearTimer?: (t: NodeJS.Timeout) => void;
@@ -37,6 +40,13 @@ export function nextIntervalMs(
   if (urgency === "idle") return intervals.idleMs;
   return intervals.unavailableMs;
 }
+
+const DEFAULT_INTERVALS: SchedulerIntervals = {
+  workingMs: 2_000,
+  idleMs: 3_000,
+  unavailableMs: 10_000,
+  backoffCapMs: 30_000,
+};
 
 /**
  * Demand-driven scheduler: runs only while consumers are visible / demand > 0.
@@ -82,6 +92,11 @@ export class PollScheduler {
     if (!this.stopped) this.reschedule();
   }
 
+  /** Force interval re-read after config patch. */
+  touchIntervals(): void {
+    if (!this.stopped && this.demand > 0) this.reschedule();
+  }
+
   noteSuccess(): void {
     this.failureStreak = 0;
   }
@@ -103,14 +118,18 @@ export class PollScheduler {
 
   stop(): void {
     this.stopped = true;
-    if (this.timer) {
+    if (this.timer != null) {
       (this.opts.clearTimer ?? clearTimeout)(this.timer);
       this.timer = null;
     }
   }
 
+  readIntervals(): SchedulerIntervals {
+    return this.opts.getIntervals?.() ?? this.opts.intervals ?? DEFAULT_INTERVALS;
+  }
+
   currentIntervalMs(): number {
-    return nextIntervalMs(this.urgency, this.opts.intervals, this.failureStreak);
+    return nextIntervalMs(this.urgency, this.readIntervals(), this.failureStreak);
   }
 
   private ensureRunning(): void {
@@ -119,7 +138,7 @@ export class PollScheduler {
   }
 
   private reschedule(): void {
-    if (this.timer) {
+    if (this.timer != null) {
       (this.opts.clearTimer ?? clearTimeout)(this.timer);
       this.timer = null;
     }

@@ -33,7 +33,10 @@ export function eventVersionKey(v: EventVersion): string {
   return `${v.logicalSessionId}\0${v.state}\0${v.stateStartedAt}`;
 }
 
-export function sameEventVersion(a: EventVersion | null | undefined, b: EventVersion | null | undefined): boolean {
+export function sameEventVersion(
+  a: EventVersion | null | undefined,
+  b: EventVersion | null | undefined,
+): boolean {
   if (!a || !b) return false;
   return (
     a.logicalSessionId === b.logicalSessionId &&
@@ -41,6 +44,15 @@ export function sameEventVersion(a: EventVersion | null | undefined, b: EventVer
     a.stateStartedAt === b.stateStartedAt
   );
 }
+
+/** Safe identity labels for ghosts — never handles/content. */
+export type GhostLabel = {
+  repo: string;
+  worktree: string;
+  agentType: AgentType | string;
+  hostId: string;
+  cardState: "closed" | "identity_lost";
+};
 
 export type SessionMeta = {
   logicalSessionId: string;
@@ -61,23 +73,28 @@ export type SessionMeta = {
   lastAlertAt: number | null;
 };
 
+export type PersistedSessionMeta = {
+  ackedEvent: EventVersion | null;
+  unreadEvent: EventVersion | null;
+  worktreeUnreadSeeded: boolean;
+  stateChangedAt: number;
+  workingSince: number | null;
+  lastAlertEvent: EventVersion | null;
+  lastAlertAt: number | null;
+  /** Optional safe labels for restart ghost recovery. */
+  ghostLabel?: GhostLabel | null;
+};
+
 export type PersistedDashboardState = {
   schemaVersion: 1;
   selectedLogicalSessionId: string | null;
   /** logicalSessionId → slot (0–15). */
   slotByLogicalId: Record<string, number>;
-  sessions: Record<
-    string,
-    {
-      ackedEvent: EventVersion | null;
-      unreadEvent: EventVersion | null;
-      worktreeUnreadSeeded: boolean;
-      stateChangedAt: number;
-      workingSince: number | null;
-      lastAlertEvent: EventVersion | null;
-      lastAlertAt: number | null;
-    }
-  >;
+  sessions: Record<string, PersistedSessionMeta>;
+  /** logicalSessionId → safe ghost labels for unacked closed/identity_lost. */
+  ghosts?: Record<string, GhostLabel>;
+  /** Acquired closed ids suppressed while still listed missing_terminal. */
+  suppressedClosedIds?: string[];
 };
 
 export type CardViewModel = {
@@ -148,6 +165,11 @@ export type RefreshSource = {
   runtimeId?: string;
   issues?: string[];
   capturedAtMs: number;
+  /**
+   * When false, discovery topology is incomplete/failed.
+   * Update readiness/issues only — never mutate identity/ghosts/unread/slots from empty sessions.
+   */
+  topologyReliable: boolean;
 };
 
 export type DashboardAction =
@@ -158,10 +180,40 @@ export type DashboardAction =
   | { type: "alert_emitted"; logicalSessionId: string; event: EventVersion; nowMs: number }
   | { type: "hydrate"; persisted: PersistedDashboardState };
 
-/** Fail closed: persisted metadata must never carry handles or content. */
-export function assertNoHandlesInPersisted(persisted: PersistedDashboardState): void {
-  const text = JSON.stringify(persisted);
-  if (/runtimeHandle|"handle"|ptyId|incarnation/i.test(text)) {
-    throw new Error("persisted dashboard state must not contain runtime handles or terminal content");
+/** Object-key inspection only — never substring-match user values (repo/branch ids). */
+const FORBIDDEN_PERSIST_KEYS = new Set([
+  "runtimeHandle",
+  "handle",
+  "ptyId",
+  "incarnation",
+  "incarnationId",
+  "prompt",
+  "preview",
+  "stdout",
+  "stderr",
+  "title",
+  "toolInput",
+  "lastAssistantMessage",
+  "path",
+  "worktreePath",
+]);
+
+function assertSafePersistKeys(value: unknown, path: string): void {
+  if (value == null) return;
+  if (Array.isArray(value)) {
+    value.forEach((v, i) => assertSafePersistKeys(v, `${path}[${i}]`));
+    return;
   }
+  if (typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (FORBIDDEN_PERSIST_KEYS.has(key)) {
+      throw new Error(`persisted dashboard state contains forbidden key: ${path}.${key}`);
+    }
+    assertSafePersistKeys(child, path ? `${path}.${key}` : key);
+  }
+}
+
+/** Fail closed: persisted metadata must never carry handles or content-bearing keys. */
+export function assertNoHandlesInPersisted(persisted: PersistedDashboardState): void {
+  assertSafePersistKeys(persisted, "");
 }

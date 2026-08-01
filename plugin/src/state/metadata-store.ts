@@ -1,16 +1,20 @@
 /**
  * Atomic persistence for dashboard metadata only.
  * Never stores runtime handles, prompts, previews, or terminal output.
+ * Content guards inspect object keys only — never substring user values.
  */
 
 import { mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 import { resolveConfigPaths, type ConfigPaths } from "../config/store.js";
+import type { RedactedLogger } from "../diagnostics/logger.js";
 import {
   assertNoHandlesInPersisted,
   SLOT_COUNT,
   type EventVersion,
+  type GhostLabel,
   type PersistedDashboardState,
+  type SessionCardState,
 } from "./types.js";
 
 export const METADATA_SCHEMA_VERSION = 1 as const;
@@ -21,6 +25,8 @@ export function emptyPersistedState(): PersistedDashboardState {
     selectedLogicalSessionId: null,
     slotByLogicalId: {},
     sessions: {},
+    ghosts: {},
+    suppressedClosedIds: [],
   };
 }
 
@@ -37,9 +43,28 @@ function asEventVersion(raw: unknown): EventVersion | null {
   if (typeof stateStartedAt !== "number" || !Number.isFinite(stateStartedAt)) return null;
   return {
     logicalSessionId,
-    state: state as EventVersion["state"],
+    state: state as SessionCardState,
     stateStartedAt,
   };
+}
+
+function asGhostLabel(raw: unknown): GhostLabel | null {
+  if (!isObject(raw)) return null;
+  const repo = raw.repo;
+  const worktree = raw.worktree;
+  const agentType = raw.agentType;
+  const hostId = raw.hostId;
+  const cardState = raw.cardState;
+  if (
+    typeof repo !== "string" ||
+    typeof worktree !== "string" ||
+    typeof agentType !== "string" ||
+    typeof hostId !== "string" ||
+    (cardState !== "closed" && cardState !== "identity_lost")
+  ) {
+    return null;
+  }
+  return { repo, worktree, agentType, hostId, cardState };
 }
 
 export function parsePersistedState(input: unknown): PersistedDashboardState {
@@ -79,7 +104,23 @@ export function parsePersistedState(input: unknown): PersistedDashboardState {
           typeof raw.lastAlertAt === "number" && Number.isFinite(raw.lastAlertAt)
             ? raw.lastAlertAt
             : null,
+        ghostLabel: asGhostLabel(raw.ghostLabel),
       };
+    }
+  }
+
+  const ghosts: Record<string, GhostLabel> = {};
+  if (isObject(input.ghosts)) {
+    for (const [id, raw] of Object.entries(input.ghosts)) {
+      const label = asGhostLabel(raw);
+      if (label) ghosts[id] = label;
+    }
+  }
+
+  const suppressedClosedIds: string[] = [];
+  if (Array.isArray(input.suppressedClosedIds)) {
+    for (const id of input.suppressedClosedIds) {
+      if (typeof id === "string" && id.length > 0) suppressedClosedIds.push(id);
     }
   }
 
@@ -88,6 +129,8 @@ export function parsePersistedState(input: unknown): PersistedDashboardState {
     selectedLogicalSessionId: selected,
     slotByLogicalId,
     sessions,
+    ghosts,
+    suppressedClosedIds,
   };
   assertNoHandlesInPersisted(value);
   return value;
@@ -117,6 +160,7 @@ async function atomicWriteJson(filePath: string, value: unknown): Promise<void> 
 
 export type MetadataStoreOptions = {
   paths?: ConfigPaths;
+  logger?: RedactedLogger;
 };
 
 /**
@@ -126,10 +170,12 @@ export class MetadataStore {
   readonly paths: ConfigPaths;
   private snapshot: PersistedDashboardState;
   private writeLock: Promise<void> = Promise.resolve();
+  private readonly logger?: RedactedLogger;
 
   constructor(options: MetadataStoreOptions = {}) {
     this.paths = options.paths ?? resolveConfigPaths();
     this.snapshot = emptyPersistedState();
+    this.logger = options.logger;
   }
 
   getSnapshot(): PersistedDashboardState {
@@ -155,6 +201,7 @@ export class MetadataStore {
         this.snapshot = emptyPersistedState();
         return this.snapshot;
       }
+      this.logger?.error("metadata_load_failed", { code: code ?? "error" });
       this.snapshot = emptyPersistedState();
       return this.snapshot;
     }
@@ -167,15 +214,17 @@ export class MetadataStore {
       selectedLogicalSessionId: next.selectedLogicalSessionId,
       slotByLogicalId: { ...next.slotByLogicalId },
       sessions: { ...next.sessions },
+      ghosts: { ...(next.ghosts ?? {}) },
+      suppressedClosedIds: [...(next.suppressedClosedIds ?? [])],
     };
-    // Fail closed if any session blob looks like it contains handles/content keys.
-    const blob = JSON.stringify(value);
-    if (/(prompt|preview|stdout|stderr|runtimeHandle|"handle")/i.test(blob)) {
-      throw new Error("refusing to persist content-bearing dashboard metadata");
-    }
+    // Key-only inspection (assertNoHandlesInPersisted) — never substring user values.
     this.snapshot = value;
     const op = this.writeLock.then(() => atomicWriteJson(this.paths.statePath, value));
-    this.writeLock = op.catch(() => undefined);
+    this.writeLock = op.catch((err) => {
+      this.logger?.error("metadata_write_failed", {
+        code: err instanceof Error ? err.name : "error",
+      });
+    });
     await op;
   }
 }

@@ -4,7 +4,7 @@
  */
 
 import type { LogicalSession } from "../orca/discovery.js";
-import type { KnownAgentState } from "../orca/schema.js";
+import type { AgentType, KnownAgentState } from "../orca/schema.js";
 import { allocateSlots, emptySlotAssignment } from "./slots.js";
 import { pickNextAttention } from "./attention.js";
 import {
@@ -16,6 +16,7 @@ import {
   type DashboardAction,
   type DashboardSnapshot,
   type EventVersion,
+  type GhostLabel,
   type PersistedDashboardState,
   type SessionCardState,
   type SessionMeta,
@@ -29,12 +30,21 @@ export type DashboardState = {
   liveById: Map<string, LogicalSession>;
   /** Ghost cards retained until ack: closed / identity_lost. */
   ghosts: Map<string, CardViewModel>;
+  /** Safe labels for ghosts (also used after hydrate before first refresh). */
+  ghostLabels: Map<string, GhostLabel>;
+  /**
+   * Acquired-closed logical ids suppressed while still listed with missing_terminal.
+   * Cleared when the id fully disappears from topology or reappears with a live terminal.
+   */
+  suppressedClosedIds: Set<string>;
   orcaReady: boolean;
   runtimeId?: string;
   issues: string[];
   capturedAtMs: number;
   pendingAlerts: AlertEvent[];
   stuckThresholdMinutes: number;
+  /** True after at least one topology-reliable refresh since hydrate. */
+  hasReliableTopology: boolean;
 };
 
 export function createInitialDashboardState(stuckThresholdMinutes = 60): DashboardState {
@@ -44,11 +54,14 @@ export function createInitialDashboardState(stuckThresholdMinutes = 60): Dashboa
     metaById: new Map(),
     liveById: new Map(),
     ghosts: new Map(),
+    ghostLabels: new Map(),
+    suppressedClosedIds: new Set(),
     orcaReady: false,
     issues: [],
     capturedAtMs: 0,
     pendingAlerts: [],
     stuckThresholdMinutes,
+    hasReliableTopology: false,
   };
 }
 
@@ -72,11 +85,6 @@ function presentationFromSession(
   stuckThresholdMinutes: number,
   nowMs: number,
 ): { cardState: SessionCardState; stuck: boolean; underlying: SessionCardState } {
-  if (!session) {
-    return { cardState: "unavailable", stuck: false, underlying: "unavailable" };
-  }
-
-  // Join health presentation overrides when terminal is not safely usable.
   if (session.joinHealth === "identity_lost") {
     return { cardState: "identity_lost", stuck: false, underlying: "identity_lost" };
   }
@@ -87,11 +95,10 @@ function presentationFromSession(
     return { cardState: "disabled", stuck: false, underlying: "unknown" };
   }
   if (session.joinHealth === "missing_terminal") {
-    // Live discovery without terminal is treated as closed synthetic path by refresh.
     return { cardState: "closed", stuck: false, underlying: "closed" };
   }
   if (session.joinHealth === "stale_handle" || session.joinHealth === "not_writable") {
-    return { cardState: "disabled", stuck: false, underlying: session.state };
+    return { cardState: "disabled", stuck: false, underlying: mapAgentState(session.state) };
   }
   if (session.joinHealth === "orca_unavailable") {
     return { cardState: "unavailable", stuck: false, underlying: "unavailable" };
@@ -135,7 +142,6 @@ function makeEventVersion(
   stateStartedAt: number | null,
   fallbackNow: number,
 ): EventVersion | null {
-  // Unread-capable states only.
   if (
     cardState !== "waiting" &&
     cardState !== "done" &&
@@ -172,6 +178,26 @@ function worktreeLabel(session: Pick<LogicalSession, "displayName" | "worktreeId
   return idx >= 0 ? id.slice(idx + 2) : id;
 }
 
+function labelsFromSession(session: LogicalSession): GhostLabel {
+  return {
+    repo: repoLabel(session),
+    worktree: worktreeLabel(session),
+    agentType: session.agentType,
+    hostId: session.hostId,
+    cardState: "identity_lost",
+  };
+}
+
+function labelsFromCard(card: CardViewModel, cardState: "closed" | "identity_lost"): GhostLabel {
+  return {
+    repo: card.repo,
+    worktree: card.worktree,
+    agentType: card.agentType,
+    hostId: card.hostId,
+    cardState,
+  };
+}
+
 function buildCardView(
   session: LogicalSession | null,
   meta: SessionMeta,
@@ -180,17 +206,16 @@ function buildCardView(
   underlying: SessionCardState,
   selected: boolean,
   nowMs: number,
+  labels?: GhostLabel | null,
 ): CardViewModel {
   const logicalSessionId = meta.logicalSessionId;
   const stateStartedAt =
-    session?.stateStartedAt ??
-    meta.unreadEvent?.stateStartedAt ??
-    meta.stateChangedAt;
+    session?.stateStartedAt ?? meta.unreadEvent?.stateStartedAt ?? meta.stateChangedAt;
   const event = meta.unreadEvent;
   const elapsedBase =
     cardState === "stuck" && meta.workingSince != null
       ? meta.workingSince
-      : stateStartedAt ?? meta.stateChangedAt;
+      : (stateStartedAt ?? meta.stateChangedAt);
   return {
     logicalSessionId,
     slot: meta.slot,
@@ -200,13 +225,15 @@ function buildCardView(
     stuck,
     cardState,
     underlyingState: underlying,
-    agentType: session?.agentType ?? "unknown",
-    repo: session ? repoLabel(session) : logicalSessionId.split(":")[0] ?? "?",
-    worktree: session ? worktreeLabel(session) : "lost",
-    hostId: session?.hostId ?? "local",
+    agentType: (session?.agentType ?? labels?.agentType ?? "unknown") as AgentType,
+    repo: session ? repoLabel(session) : (labels?.repo ?? logicalSessionId.split(":")[0] ?? "?"),
+    worktree: session ? worktreeLabel(session) : (labels?.worktree ?? "lost"),
+    hostId: session?.hostId ?? labels?.hostId ?? "local",
     elapsedMs: Math.max(0, nowMs - elapsedBase),
     ompChildCount: session?.ompChildCount ?? 0,
-    joinHealth: session?.joinHealth ?? (cardState === "identity_lost" ? "identity_lost" : "missing_terminal"),
+    joinHealth:
+      session?.joinHealth ??
+      (cardState === "identity_lost" ? "identity_lost" : "missing_terminal"),
     connected: session?.connected ?? false,
     writable: session?.writable ?? false,
     runtimeHandle: session?.runtimeHandle,
@@ -237,17 +264,10 @@ function applyUnreadTransition(
   nowMs: number,
   alerts: AlertEvent[],
 ): void {
-  if (!nextEvent) {
-    // Leaving an unread-capable state does not clear unread; ack does.
-    return;
-  }
+  if (!nextEvent) return;
   const prev = meta.unreadEvent;
-  if (prev && sameEventVersion(prev, nextEvent)) {
-    // updatedAt within same event cannot reflag.
-    return;
-  }
+  if (prev && sameEventVersion(prev, nextEvent)) return;
   if (meta.ackedEvent && sameEventVersion(meta.ackedEvent, nextEvent)) {
-    // Already acked this exact event.
     meta.unreadEvent = nextEvent;
     return;
   }
@@ -261,7 +281,12 @@ function applyUnreadTransition(
   }
 }
 
-function seedWorktreeUnread(meta: SessionMeta, session: LogicalSession, cardState: SessionCardState, nowMs: number): void {
+function seedWorktreeUnread(
+  meta: SessionMeta,
+  session: LogicalSession,
+  cardState: SessionCardState,
+  nowMs: number,
+): void {
   if (!session.worktreeUnread) return;
   if (session.trackedAgentCountInWorktree !== 1) return;
   if (meta.worktreeUnreadSeeded) return;
@@ -300,90 +325,207 @@ function isGhostFreeable(cardState: SessionCardState, meta: SessionMeta): boolea
   return sameEventVersion(meta.unreadEvent, meta.ackedEvent);
 }
 
-function refreshDashboard(state: DashboardState, action: Extract<DashboardAction, { type: "refresh" }>): DashboardState {
+function makeIdentityLostGhost(
+  state: DashboardState,
+  id: string,
+  nowMs: number,
+  labels: GhostLabel,
+  prevSession: LogicalSession | null,
+): void {
+  const meta = ensureMeta(state, id, nowMs);
+  const ev: EventVersion = {
+    logicalSessionId: id,
+    state: "identity_lost",
+    stateStartedAt: nowMs,
+  };
+  if (!sameEventVersion(meta.unreadEvent, ev) && !sameEventVersion(meta.ackedEvent, ev)) {
+    meta.unreadEvent = ev;
+    meta.stateChangedAt = nowMs;
+  }
+  const label: GhostLabel = { ...labels, cardState: "identity_lost" };
+  state.ghostLabels.set(id, label);
+  const ghost = buildCardView(
+    prevSession
+      ? {
+          ...prevSession,
+          runtimeHandle: undefined,
+          connected: false,
+          writable: false,
+          joinHealth: "identity_lost",
+          state: "identity_lost",
+          rawState: "identity_lost",
+        }
+      : null,
+    meta,
+    "identity_lost",
+    false,
+    "identity_lost",
+    state.selectedLogicalSessionId === id,
+    nowMs,
+    label,
+  );
+  state.ghosts.set(id, ghost);
+}
+
+function makeClosedGhost(
+  state: DashboardState,
+  id: string,
+  nowMs: number,
+  session: LogicalSession | null,
+  labels: GhostLabel,
+): void {
+  const meta = ensureMeta(state, id, nowMs);
+  const ev: EventVersion = {
+    logicalSessionId: id,
+    state: "closed",
+    stateStartedAt: nowMs,
+  };
+  if (!sameEventVersion(meta.ackedEvent, ev)) {
+    if (!sameEventVersion(meta.unreadEvent, ev)) {
+      meta.unreadEvent = ev;
+      meta.stateChangedAt = nowMs;
+    }
+  }
+  const label: GhostLabel = { ...labels, cardState: "closed" };
+  state.ghostLabels.set(id, label);
+  const ghost = buildCardView(
+    session
+      ? { ...session, joinHealth: "missing_terminal", runtimeHandle: undefined, connected: false, writable: false }
+      : null,
+    meta,
+    "closed",
+    false,
+    "closed",
+    state.selectedLogicalSessionId === id,
+    nowMs,
+    label,
+  );
+  state.ghosts.set(id, ghost);
+}
+
+function freeSession(state: DashboardState, id: string): void {
+  state.ghosts.delete(id);
+  state.ghostLabels.delete(id);
+  state.metaById.delete(id);
+  state.slotByLogicalId.delete(id);
+  if (state.selectedLogicalSessionId === id) state.selectedLogicalSessionId = null;
+}
+
+function refreshTopologyUnreliable(
+  state: DashboardState,
+  action: Extract<DashboardAction, { type: "refresh" }>,
+): DashboardState {
+  const source = action.source;
+  state.orcaReady = source.orcaReady;
+  state.runtimeId = source.runtimeId;
+  state.issues = [...(source.issues ?? [])];
+  state.capturedAtMs = source.capturedAtMs;
+  state.stuckThresholdMinutes = action.stuckThresholdMinutes;
+  state.pendingAlerts = [];
+  // Keep liveById / ghosts / slots / unread / meta untouched.
+  return state;
+}
+
+function refreshDashboard(
+  state: DashboardState,
+  action: Extract<DashboardAction, { type: "refresh" }>,
+): DashboardState {
+  const source = action.source;
+  if (!source.topologyReliable) {
+    return refreshTopologyUnreliable(state, action);
+  }
+
   const nowMs = action.nowMs;
   const stuckThresholdMinutes = action.stuckThresholdMinutes;
-  const source = action.source;
   const nextLive = new Map<string, LogicalSession>();
   for (const s of source.sessions) nextLive.set(s.logicalSessionId, s);
 
   const alerts: AlertEvent[] = [];
   const prevLiveIds = new Set(state.liveById.keys());
   const nextLiveIds = new Set(nextLive.keys());
+  const firstReliable = !state.hasReliableTopology;
+
+  // Hydrate recovery: persisted slotted sessions missing from first reliable topology → identity_lost.
+  if (firstReliable) {
+    for (const [id, slot] of state.slotByLogicalId) {
+      if (nextLiveIds.has(id)) continue;
+      if (state.ghosts.has(id)) continue;
+      if (state.suppressedClosedIds.has(id)) continue;
+      const labels =
+        state.ghostLabels.get(id) ??
+        ({
+          repo: id.split(":")[0] ?? "?",
+          worktree: "lost",
+          agentType: "unknown",
+          hostId: "local",
+          cardState: "identity_lost",
+        } satisfies GhostLabel);
+      makeIdentityLostGhost(state, id, nowMs, labels, null);
+      void slot;
+    }
+    // Also ghost any hydrated meta ids that had unread closed/identity_lost and no live match.
+    for (const [id, meta] of state.metaById) {
+      if (nextLiveIds.has(id) || state.ghosts.has(id)) continue;
+      if (state.suppressedClosedIds.has(id)) continue;
+      const unreadState = meta.unreadEvent?.state;
+      if (unreadState === "closed" || unreadState === "identity_lost") {
+        const labels =
+          state.ghostLabels.get(id) ??
+          ({
+            repo: id.split(":")[0] ?? "?",
+            worktree: "lost",
+            agentType: "unknown",
+            hostId: "local",
+            cardState: unreadState,
+          } satisfies GhostLabel);
+        if (unreadState === "closed") {
+          makeClosedGhost(state, id, nowMs, null, labels);
+        } else {
+          makeIdentityLostGhost(state, id, nowMs, labels, null);
+        }
+      }
+    }
+  }
 
   // Identity-lost: previous live ids missing from next (paneKey did not survive).
   for (const id of prevLiveIds) {
     if (nextLiveIds.has(id)) continue;
     if (state.ghosts.has(id)) continue;
+    // Fully gone: clear suppression so a future new appearance is a new lifecycle.
+    state.suppressedClosedIds.delete(id);
     const prev = state.liveById.get(id)!;
-    const meta = ensureMeta(state, id, nowMs);
-    const closedAt = nowMs;
-    const ev: EventVersion = {
-      logicalSessionId: id,
-      state: "identity_lost",
-      stateStartedAt: closedAt,
-    };
-    if (!sameEventVersion(meta.unreadEvent, ev) && !sameEventVersion(meta.ackedEvent, ev)) {
-      meta.unreadEvent = ev;
-      meta.stateChangedAt = nowMs;
-      // identity_lost is silent (no urgent sound)
-    }
-    const ghost = buildCardView(
-      {
-        ...prev,
-        runtimeHandle: undefined,
-        connected: false,
-        writable: false,
-        joinHealth: "identity_lost",
-        state: "identity_lost",
-        rawState: "identity_lost",
-      },
-      meta,
-      "identity_lost",
-      false,
-      "identity_lost",
-      state.selectedLogicalSessionId === id,
-      nowMs,
-    );
-    state.ghosts.set(id, ghost);
+    makeIdentityLostGhost(state, id, nowMs, labelsFromSession(prev), prev);
   }
 
-  // Gone terminals among still-listed agents with missing_terminal → closed synthetic.
-  // Also: live sessions that vanish entirely already became identity_lost above.
-  // Sessions present in next with missing_terminal while previously ok → closed.
+  // missing_terminal → closed ghost (including first observation).
   for (const [id, session] of nextLive) {
-    const meta = ensureMeta(state, id, nowMs);
-    if (session.joinHealth === "missing_terminal" && prevLiveIds.has(id)) {
-      const prev = state.liveById.get(id);
-      if (prev && prev.joinHealth !== "missing_terminal") {
-        const ev: EventVersion = {
-          logicalSessionId: id,
-          state: "closed",
-          stateStartedAt: nowMs,
-        };
-        if (!sameEventVersion(meta.ackedEvent, ev)) {
-          meta.unreadEvent = ev;
-          meta.stateChangedAt = nowMs;
-        }
-        state.ghosts.set(
-          id,
-          buildCardView(
-            { ...session, joinHealth: "missing_terminal", runtimeHandle: undefined },
-            meta,
-            "closed",
-            false,
-            "closed",
-            state.selectedLogicalSessionId === id,
-            nowMs,
-          ),
-        );
-      }
-    }
+    if (session.joinHealth !== "missing_terminal") continue;
+    if (state.suppressedClosedIds.has(id)) continue;
+    if (state.ghosts.has(id) && state.ghosts.get(id)!.cardState === "closed") continue;
+
+    const prev = state.liveById.get(id);
+    const transitioned =
+      !prev || prev.joinHealth !== "missing_terminal" || !state.ghosts.has(id);
+    if (!transitioned && state.ghosts.has(id)) continue;
+
+    makeClosedGhost(state, id, nowMs, session, labelsFromSession(session));
   }
 
   // Update live sessions presentation + unread.
   for (const [id, session] of nextLive) {
-    // If this id is a closed ghost and still missing terminal, keep ghost path.
+    // Suppressed closed while still missing_terminal: do not re-track.
+    if (state.suppressedClosedIds.has(id) && session.joinHealth === "missing_terminal") {
+      continue;
+    }
+    // Live terminal returned: clear suppression and closed/identity ghost.
+    if (
+      state.suppressedClosedIds.has(id) &&
+      session.joinHealth !== "missing_terminal" &&
+      session.joinHealth !== "identity_lost"
+    ) {
+      state.suppressedClosedIds.delete(id);
+    }
+
     const existingGhost = state.ghosts.get(id);
     if (existingGhost && (existingGhost.cardState === "closed" || existingGhost.cardState === "identity_lost")) {
       if (session.joinHealth === "missing_terminal" || session.joinHealth === "identity_lost") {
@@ -391,6 +533,13 @@ function refreshDashboard(state: DashboardState, action: Extract<DashboardAction
       }
       // Pane returned with same logical id — clear ghost, reattach handle.
       state.ghosts.delete(id);
+      state.ghostLabels.delete(id);
+      state.suppressedClosedIds.delete(id);
+    }
+
+    if (session.joinHealth === "missing_terminal") {
+      // Already ghosted above; skip live presentation.
+      continue;
     }
 
     const meta = ensureMeta(state, id, nowMs);
@@ -398,7 +547,12 @@ function refreshDashboard(state: DashboardState, action: Extract<DashboardAction
     const pres = presentationFromSession(session, meta, stuckThresholdMinutes, nowMs);
     const ev = makeEventVersion(id, pres.cardState, session.stateStartedAt, nowMs);
     applyUnreadTransition(meta, ev, nowMs, alerts);
-    seedWorktreeUnread(meta, session, pres.cardState === "stuck" ? "working" : pres.cardState, nowMs);
+    seedWorktreeUnread(
+      meta,
+      session,
+      pres.cardState === "stuck" ? "working" : pres.cardState,
+      nowMs,
+    );
   }
 
   // Drop freeable ghosts (acked closed / identity_lost).
@@ -406,22 +560,27 @@ function refreshDashboard(state: DashboardState, action: Extract<DashboardAction
     const meta = state.metaById.get(id);
     if (!meta) {
       state.ghosts.delete(id);
+      state.ghostLabels.delete(id);
       continue;
     }
     if (isGhostFreeable(ghost.cardState, meta)) {
-      state.ghosts.delete(id);
-      state.metaById.delete(id);
-      state.slotByLogicalId.delete(id);
-      if (state.selectedLogicalSessionId === id) state.selectedLogicalSessionId = null;
+      if (ghost.cardState === "closed") {
+        // Keep suppressed while still listed missing_terminal.
+        const stillListed = nextLive.get(id);
+        if (stillListed && stillListed.joinHealth === "missing_terminal") {
+          state.suppressedClosedIds.add(id);
+        }
+      }
+      freeSession(state, id);
     }
   }
 
-  // Active ids = live (non-child already filtered) + remaining ghosts.
+  // Active ids = live (not ghosted/suppressed) + remaining ghosts.
   const activeIds: string[] = [];
   const seen = new Set<string>();
-  for (const id of nextLive.keys()) {
-    // Skip live ids that are purely missing and represented as ghosts.
+  for (const [id, session] of nextLive) {
     if (state.ghosts.has(id)) continue;
+    if (state.suppressedClosedIds.has(id) && session.joinHealth === "missing_terminal") continue;
     activeIds.push(id);
     seen.add(id);
   }
@@ -442,9 +601,13 @@ function refreshDashboard(state: DashboardState, action: Extract<DashboardAction
     meta.slot = null;
   }
 
-  // Prune meta for ids no longer active.
+  // Prune meta for ids no longer active (keep suppressed set itself).
   for (const id of [...state.metaById.keys()]) {
     if (!seen.has(id)) state.metaById.delete(id);
+  }
+  // Drop suppression for ids that fully disappeared from topology.
+  for (const id of [...state.suppressedClosedIds]) {
+    if (!nextLiveIds.has(id)) state.suppressedClosedIds.delete(id);
   }
 
   state.liveById = nextLive;
@@ -454,6 +617,7 @@ function refreshDashboard(state: DashboardState, action: Extract<DashboardAction
   state.capturedAtMs = source.capturedAtMs;
   state.stuckThresholdMinutes = stuckThresholdMinutes;
   state.pendingAlerts = alerts;
+  state.hasReliableTopology = true;
   return state;
 }
 
@@ -468,6 +632,12 @@ export function reduceDashboard(state: DashboardState, action: DashboardAction):
         ),
       );
       state.metaById = new Map();
+      state.ghostLabels = new Map();
+      state.ghosts = new Map();
+      state.suppressedClosedIds = new Set(p.suppressedClosedIds ?? []);
+      state.hasReliableTopology = false;
+      state.liveById = new Map();
+
       for (const [id, raw] of Object.entries(p.sessions)) {
         state.metaById.set(id, {
           logicalSessionId: id,
@@ -480,6 +650,12 @@ export function reduceDashboard(state: DashboardState, action: DashboardAction):
           lastAlertEvent: raw.lastAlertEvent,
           lastAlertAt: raw.lastAlertAt,
         });
+        if (raw.ghostLabel) state.ghostLabels.set(id, raw.ghostLabel);
+      }
+      if (p.ghosts) {
+        for (const [id, label] of Object.entries(p.ghosts)) {
+          state.ghostLabels.set(id, label);
+        }
       }
       return state;
     }
@@ -489,18 +665,18 @@ export function reduceDashboard(state: DashboardState, action: DashboardAction):
     }
     case "acknowledge":
     case "focus_success": {
-      const meta = state.metaById.get(action.logicalSessionId);
+      const id = action.logicalSessionId;
+      const meta = state.metaById.get(id);
       if (meta) acknowledgeMeta(meta, action.nowMs);
-      // Free ghost slots after ack.
-      const ghost = state.ghosts.get(action.logicalSessionId);
+      const ghost = state.ghosts.get(id);
       if (ghost && meta && isGhostFreeable(ghost.cardState, meta)) {
-        state.ghosts.delete(action.logicalSessionId);
-        state.metaById.delete(action.logicalSessionId);
-        state.slotByLogicalId.delete(action.logicalSessionId);
-        if (state.selectedLogicalSessionId === action.logicalSessionId) {
-          state.selectedLogicalSessionId = null;
+        if (ghost.cardState === "closed") {
+          const live = state.liveById.get(id);
+          if (live && live.joinHealth === "missing_terminal") {
+            state.suppressedClosedIds.add(id);
+          }
         }
-        // Re-pack is deferred to next refresh; keep other slots stable.
+        freeSession(state, id);
       }
       return state;
     }
@@ -511,7 +687,11 @@ export function reduceDashboard(state: DashboardState, action: DashboardAction):
         meta.lastAlertAt = action.nowMs;
       }
       state.pendingAlerts = state.pendingAlerts.filter(
-        (a) => !(a.logicalSessionId === action.logicalSessionId && sameEventVersion(a.event, action.event)),
+        (a) =>
+          !(
+            a.logicalSessionId === action.logicalSessionId &&
+            sameEventVersion(a.event, action.event)
+          ),
       );
       return state;
     }
@@ -522,31 +702,54 @@ export function reduceDashboard(state: DashboardState, action: DashboardAction):
   }
 }
 
-export function selectDashboardSnapshot(state: DashboardState, nowMs: number = state.capturedAtMs): DashboardSnapshot {
+function applyUnavailableOverlay(card: CardViewModel, orcaReady: boolean): CardViewModel {
+  if (orcaReady) return card;
+  if (card.cardState === "closed" || card.cardState === "identity_lost") return card;
+  return {
+    ...card,
+    cardState: "unavailable",
+    stuck: false,
+    underlyingState: card.underlyingState,
+    runtimeHandle: undefined,
+    connected: false,
+    writable: false,
+  };
+}
+
+export function selectDashboardSnapshot(
+  state: DashboardState,
+  nowMs: number = state.capturedAtMs,
+): DashboardSnapshot {
   const cards: CardViewModel[] = [];
   const stuckThresholdMinutes = state.stuckThresholdMinutes;
 
   for (const [id, session] of state.liveById) {
     if (state.ghosts.has(id)) continue;
-    const meta = state.metaById.get(id) ?? defaultMeta(id, nowMs, state.slotByLogicalId.get(id) ?? null);
+    if (state.suppressedClosedIds.has(id) && session.joinHealth === "missing_terminal") continue;
+    const meta =
+      state.metaById.get(id) ??
+      defaultMeta(id, nowMs, state.slotByLogicalId.get(id) ?? null);
     meta.slot = state.slotByLogicalId.has(id) ? state.slotByLogicalId.get(id)! : meta.slot;
     const pres = presentationFromSession(session, meta, stuckThresholdMinutes, nowMs);
-    cards.push(
-      buildCardView(
-        session,
-        meta,
-        pres.cardState,
-        pres.stuck,
-        pres.underlying,
-        state.selectedLogicalSessionId === id,
-        nowMs,
-      ),
+    let card = buildCardView(
+      session,
+      meta,
+      pres.cardState,
+      pres.stuck,
+      pres.underlying,
+      state.selectedLogicalSessionId === id,
+      nowMs,
     );
+    card = applyUnavailableOverlay(card, state.orcaReady);
+    cards.push(card);
   }
 
   for (const [id, ghost] of state.ghosts) {
-    const meta = state.metaById.get(id) ?? defaultMeta(id, nowMs, state.slotByLogicalId.get(id) ?? null);
+    const meta =
+      state.metaById.get(id) ??
+      defaultMeta(id, nowMs, state.slotByLogicalId.get(id) ?? null);
     meta.slot = state.slotByLogicalId.has(id) ? state.slotByLogicalId.get(id)! : null;
+    const labels = state.ghostLabels.get(id) ?? labelsFromCard(ghost, ghost.cardState as "closed" | "identity_lost");
     const refreshed = buildCardView(
       null,
       meta,
@@ -555,14 +758,14 @@ export function selectDashboardSnapshot(state: DashboardState, nowMs: number = s
       ghost.cardState,
       state.selectedLogicalSessionId === id,
       nowMs,
+      labels,
     );
-    // Preserve identity labels from ghost.
     cards.push({
       ...refreshed,
-      repo: ghost.repo,
-      worktree: ghost.worktree,
-      agentType: ghost.agentType,
-      hostId: ghost.hostId,
+      repo: labels.repo,
+      worktree: labels.worktree,
+      agentType: labels.agentType as AgentType,
+      hostId: labels.hostId,
       ompChildCount: ghost.ompChildCount,
       joinHealth: ghost.cardState === "identity_lost" ? "identity_lost" : "missing_terminal",
     });
@@ -648,6 +851,7 @@ export function toPersistedState(state: DashboardState): PersistedDashboardState
   }
   const sessions: PersistedDashboardState["sessions"] = {};
   for (const [id, meta] of state.metaById) {
+    const label = state.ghostLabels.get(id) ?? null;
     sessions[id] = {
       ackedEvent: meta.ackedEvent,
       unreadEvent: meta.unreadEvent,
@@ -656,16 +860,22 @@ export function toPersistedState(state: DashboardState): PersistedDashboardState
       workingSince: meta.workingSince,
       lastAlertEvent: meta.lastAlertEvent,
       lastAlertAt: meta.lastAlertAt,
+      ghostLabel: label,
     };
+  }
+  const ghosts: Record<string, GhostLabel> = {};
+  for (const [id, label] of state.ghostLabels) {
+    ghosts[id] = label;
   }
   return {
     schemaVersion: 1,
     selectedLogicalSessionId: state.selectedLogicalSessionId,
     slotByLogicalId,
     sessions,
+    ghosts,
+    suppressedClosedIds: [...state.suppressedClosedIds],
   };
 }
-
 
 export { emptySlotAssignment } from "./slots.js";
 export { eventVersionKey } from "./types.js";

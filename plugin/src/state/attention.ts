@@ -1,16 +1,22 @@
 /**
  * Next Attention ranking across visible + hidden sessions.
  * Does not move cards; only selects a target logical id.
+ *
+ * Priority: unread waiting → unread error → unread stuck → unread done/closed
+ * → disconnected → identity lost → working → idle.
  */
 
 import type { CardViewModel, SessionCardState } from "./types.js";
 
+/** Unread class ranks (lower = higher priority). identity_lost sits after disconnected. */
 const UNREAD_RANK: Record<string, number> = {
   waiting: 0,
   error: 1,
   stuck: 2,
   done: 3,
   closed: 3,
+  // Unread identity-lost remains selectable (incl. overflow) until ack.
+  identity_lost: 5,
 };
 
 const NON_UNREAD_RANK: Record<string, number> = {
@@ -45,9 +51,7 @@ export type RankedAttention = {
 
 /**
  * Rank cards for Next Attention.
- * Priority: unread waiting → unread error → unread stuck → unread done/closed
- * → disconnected → identity lost → working → idle.
- * Unread ties: oldest transition first (smaller stateStartedAt / event).
+ * Unread ties: oldest transition first.
  * Non-unread ties: most recently updated first.
  */
 export function rankAttentionTargets(
@@ -57,17 +61,24 @@ export function rankAttentionTargets(
   const ranked: RankedAttention[] = [];
   for (const card of cards) {
     if (excludeLogicalSessionId && card.logicalSessionId === excludeLogicalSessionId) {
-      // Still include if it is the only candidate — caller filters alternatives.
       continue;
     }
     if (card.cardState === "unavailable") continue;
 
     if (card.unread && card.eventVersion) {
       const cls = unreadClassRank(card.eventVersion.state);
-      if (cls == null) continue;
+      if (cls != null) {
+        ranked.push({
+          logicalSessionId: card.logicalSessionId,
+          rank: cls,
+          tie: card.eventVersion.stateStartedAt,
+        });
+        continue;
+      }
+      // Unknown unread event state: fall back to card presentation rank (never drop).
       ranked.push({
         logicalSessionId: card.logicalSessionId,
-        rank: cls,
+        rank: nonUnreadRank(card.cardState),
         tie: card.eventVersion.stateStartedAt,
       });
       continue;
@@ -80,7 +91,9 @@ export function rankAttentionTargets(
     });
   }
 
-  ranked.sort((a, b) => a.rank - b.rank || a.tie - b.tie || a.logicalSessionId.localeCompare(b.logicalSessionId));
+  ranked.sort(
+    (a, b) => a.rank - b.rank || a.tie - b.tie || a.logicalSessionId.localeCompare(b.logicalSessionId),
+  );
   return ranked;
 }
 
@@ -93,7 +106,6 @@ export function pickNextAttention(
 ): string | null {
   const without = rankAttentionTargets(cards, selectedLogicalSessionId);
   if (without.length > 0) return without[0]!.logicalSessionId;
-  // Only the current selection (or nothing) remains.
   if (selectedLogicalSessionId) {
     const self = cards.find((c) => c.logicalSessionId === selectedLogicalSessionId);
     if (self && self.cardState !== "unavailable") return self.logicalSessionId;
