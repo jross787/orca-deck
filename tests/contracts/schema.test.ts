@@ -236,4 +236,62 @@ describe("tolerant decoders", () => {
     assert.equal(/term_live_/.test(serialized), false);
     assert.equal(/\/Users\//.test(serialized), false);
   });
+
+  it("maps path-bearing worktreeIds so capture serialization stays safe and joins match", () => {
+    const rawWorktreeId = "repo-id::/Users/frank/secret-project";
+    const bundle = buildRedactedFixture({
+      provenance: "synthetic",
+      scenario: "path-bearing-worktree-id",
+      worktreePs: {
+        ok: true,
+        result: {
+          worktrees: [
+            {
+              worktreeId: rawWorktreeId,
+              hostId: "local",
+              repo: "/Users/frank/secret-project",
+              path: "/Users/frank/secret-project",
+              displayName: "/Users/frank/secret-project",
+              agents: [
+                {
+                  paneKey: "tab_p:leaf_1",
+                  state: "working",
+                  agentType: "omp",
+                },
+              ],
+            },
+          ],
+        },
+      },
+      terminalList: {
+        ok: true,
+        result: {
+          terminals: [
+            {
+              handle: "term_live_path",
+              worktreeId: rawWorktreeId,
+              tabId: "tab_p",
+              leafId: "leaf_1",
+              connected: true,
+              writable: true,
+              worktreePath: "/Users/frank/secret-project",
+            },
+          ],
+        },
+      },
+    });
+
+    const wtId = bundle.worktreePs.result?.worktrees[0]?.worktreeId;
+    const termId = bundle.terminalList.result?.terminals[0]?.worktreeId;
+    assert.equal(typeof wtId, "string");
+    assert.equal(wtId, termId);
+    assert.equal(wtId, "wt_0");
+    assert.notEqual(wtId, rawWorktreeId);
+
+    const serialized = JSON.stringify(bundle);
+    assertSafeFixtureJson(serialized);
+    assert.equal(serialized.includes("/Users/"), false);
+    assert.equal(serialized.includes(rawWorktreeId), false);
+    assert.match(bundle.worktreePs.result?.worktrees[0]?.pathPlaceholder ?? "", /^<redacted-path:#0>$/);
+  });
 });

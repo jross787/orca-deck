@@ -1,0 +1,337 @@
+{
+  "meta": {
+    "schemaVersion": "orca-cli-json/1.4.159",
+    "provenance": "observed",
+    "scenario": "live-2026-08-01t19-13-55.852z",
+    "capturedAt": "2026-08-01T19:13:56.270Z",
+    "orcaAppVersion": "1.4.159",
+    "notes": [
+      "Observed via public read-only CLI (status, worktree ps, terminal list).",
+      "Redacted before disk write; handles/paths/prompts stripped.",
+      "statusMs=165 psMs=137 terminalListMs=114"
+    ],
+    "redaction": {
+      "strippedFields": [
+        "prompt",
+        "lastAssistantMessage",
+        "toolInput",
+        "preview",
+        "title",
+        "path",
+        "worktreePath",
+        "handle",
+        "ptyId",
+        "comment"
+      ],
+      "pathPolicy": "absolute paths and path-bearing worktreeIds replaced via deterministic per-bundle wt_<n> map shared by worktrees and terminals; pathPlaceholder is index-only",
+      "handlePolicy": "live runtime handles replaced with handlePlaceholder; never restore as command targets from fixtures"
+    }
+  },
+  "status": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "app": {
+        "running": true,
+        "desktopWindowStatus": "available"
+      },
+      "runtime": {
+        "state": "ready",
+        "reachable": true,
+        "runtimeId": "8bc87c34-8f06-4dd8-a482-e42e5bd4c538",
+        "appVersion": "1.4.159",
+        "capabilities": [
+          "runtime.status.compat.v1",
+          "runtime.environments.v1",
+          "remote-runtime.shared-control.v1",
+          "browser.screencast.v1",
+          "terminal.binary-stream.v1",
+          "terminal.multiplex.v1",
+          "workspace-ports.v1",
+          "mobile.tasks.v1",
+          "project-host-setup.v1",
+          "task-source-context.v1",
+          "workspace-run-context.v1",
+          "folder-workspace.path-status.v1",
+          "linear.issue-attribute-filter.v1",
+          "aiVault.v1",
+          "terminal.query-reply-input.v1",
+          "terminal.quick-commands.v1",
+          "worktree.create-idempotency.v1",
+          "terminal.create-idempotency.v2",
+          "updater.remote-control.v1",
+          "agent-session.host-authority.v1",
+          "agent-session.omp-resume-path.v1",
+          "files.mutation-ownership.v1",
+          "accounts.codex-reset-credit.v1",
+          "browser.certificate-trust.v1"
+        ]
+      },
+      "graph": {
+        "state": "ready"
+      }
+    },
+    "_meta": {
+      "runtimeId": "8bc87c34-8f06-4dd8-a482-e42e5bd4c538"
+    }
+  },
+  "worktreePs": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "worktrees": [
+        {
+          "workspaceKind": "git",
+          "worktreeId": "wt_0",
+          "repoId": "25fcf1c8-f036-4bb3-976a-a151ae2ef619",
+          "hostId": "local",
+          "terminalPlatform": "darwin",
+          "repo": "orca-deck",
+          "pathPlaceholder": "<redacted-path:#0>",
+          "branch": "refs/heads/main",
+          "isArchived": false,
+          "isMainWorktree": true,
+          "worktreeInstanceId": "d84bf616-4e7f-45a7-9e68-d940ff614f59",
+          "displayName": "main",
+          "isActive": true,
+          "unread": false,
+          "liveTerminalCount": 2,
+          "hasAttachedPty": true,
+          "lastOutputAt": 1785611636121,
+          "status": "working",
+          "agents": [
+            {
+              "paneKey": "58a2f084-6732-4a7e-a94e-ffb4711c8864:80dd4212-9b4e-47ec-aaf2-24576b9524bc",
+              "parentPaneKey": null,
+              "state": "working",
+              "agentType": "omp",
+              "toolName": "bash",
+              "interrupted": false,
+              "stateStartedAt": 1785611436827,
+              "updatedAt": 1785611634700,
+              "hasPrompt": true,
+              "hasToolInput": true
+            }
+          ]
+        },
+        {
+          "workspaceKind": "git",
+          "worktreeId": "wt_1",
+          "repoId": "e5bab97c-68e0-48ac-a4aa-03322b973cf8",
+          "hostId": "local",
+          "terminalPlatform": "darwin",
+          "repo": "dnax-site",
+          "pathPlaceholder": "<redacted-path:#1>",
+          "isArchived": false,
+          "isMainWorktree": true,
+          "worktreeInstanceId": "23ee6f00-a631-4ea4-84a7-1a3328d6855c",
+          "displayName": "dnax-site",
+          "isActive": false,
+          "unread": false,
+          "liveTerminalCount": 1,
+          "hasAttachedPty": true,
+          "lastOutputAt": 1785609923896,
+          "status": "active",
+          "agents": [
+            {
+              "paneKey": "51798653-2071-4e78-8045-5ac48d6cf853:11d1f51a-7ff5-4418-a368-a3c1a270aaab",
+              "parentPaneKey": null,
+              "state": "done",
+              "agentType": "claude",
+              "toolName": null,
+              "interrupted": false,
+              "stateStartedAt": 1785302466046,
+              "updatedAt": 1785302469376,
+              "hasPrompt": true,
+              "hasToolInput": false
+            }
+          ]
+        },
+        {
+          "workspaceKind": "git",
+          "worktreeId": "wt_2",
+          "repoId": "c44724a1-6f3a-4477-80f3-67feead6a58b",
+          "hostId": "local",
+          "terminalPlatform": "darwin",
+          "repo": "frank",
+          "pathPlaceholder": "<redacted-path:#2>",
+          "isArchived": false,
+          "isMainWorktree": true,
+          "worktreeInstanceId": "3fa22254-4f5f-447c-ae05-d61a39ce15a4",
+          "displayName": "frank",
+          "isActive": false,
+          "unread": false,
+          "liveTerminalCount": 2,
+          "hasAttachedPty": true,
+          "lastOutputAt": 1785284800985,
+          "status": "active",
+          "agents": []
+        },
+        {
+          "workspaceKind": "git",
+          "worktreeId": "wt_3",
+          "repoId": "a9e14230-461a-46a5-90a1-531edc7af52f",
+          "hostId": "local",
+          "terminalPlatform": "darwin",
+          "repo": "serigraph",
+          "pathPlaceholder": "<redacted-path:#3>",
+          "branch": "refs/heads/main",
+          "isArchived": false,
+          "isMainWorktree": true,
+          "worktreeInstanceId": "c34e0790-9fa6-4ccb-989a-f728b2bd423e",
+          "displayName": "main",
+          "isActive": false,
+          "unread": false,
+          "liveTerminalCount": 3,
+          "hasAttachedPty": true,
+          "lastOutputAt": null,
+          "status": "active",
+          "agents": [
+            {
+              "paneKey": "43551ed8-7a9c-439c-a947-44cc028138db:4073d8b9-1a26-4a76-93aa-d497bcf83ccd",
+              "parentPaneKey": null,
+              "state": "done",
+              "agentType": "omp",
+              "toolName": "read",
+              "interrupted": false,
+              "stateStartedAt": 1785155109210,
+              "updatedAt": 1785155109210,
+              "hasPrompt": true,
+              "hasToolInput": true
+            }
+          ]
+        }
+      ],
+      "totalCount": 4,
+      "truncated": false
+    }
+  },
+  "terminalList": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "terminals": [
+        {
+          "handlePlaceholder": "<redacted-handle:0>",
+          "incarnationId": "650335bf-6a68-4bf1-8abd-1020b83f1b27",
+          "orphaned": false,
+          "worktreeId": "global-floating-terminal",
+          "tabId": "7ca09ea4-5616-4c91-8d9e-6eae0ccb784b",
+          "leafId": "0def5869-4e79-43f5-92b0-a80f190a06ef",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": null,
+          "hasTitle": true
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:1>",
+          "incarnationId": "fe688240-389d-478b-92bd-bc4f3f78ae83",
+          "orphaned": false,
+          "worktreeId": "wt_0",
+          "tabId": "58a2f084-6732-4a7e-a94e-ffb4711c8864",
+          "leafId": "80dd4212-9b4e-47ec-aaf2-24576b9524bc",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1785611636239,
+          "hasTitle": true
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:2>",
+          "incarnationId": "72dfed1c-0b2d-4b2c-8097-ce4288b168f6",
+          "orphaned": false,
+          "worktreeId": "wt_1",
+          "tabId": "51798653-2071-4e78-8045-5ac48d6cf853",
+          "leafId": "11d1f51a-7ff5-4418-a368-a3c1a270aaab",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1785609923896,
+          "hasTitle": true
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:3>",
+          "incarnationId": "9a3622ca-43d5-4b79-a6c7-1fc464372740",
+          "orphaned": false,
+          "worktreeId": "wt_3",
+          "tabId": "2844ea10-2c1c-41b8-8bbb-66e909467976",
+          "leafId": "66c197a3-ef6f-4cf3-8047-8465b88a594c",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": null,
+          "hasTitle": false
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:4>",
+          "incarnationId": "6a9d1a13-25e1-43dc-bc40-86c8d70264c4",
+          "orphaned": false,
+          "worktreeId": "wt_3",
+          "tabId": "43551ed8-7a9c-439c-a947-44cc028138db",
+          "leafId": "4073d8b9-1a26-4a76-93aa-d497bcf83ccd",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": null,
+          "hasTitle": false
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:5>",
+          "incarnationId": "5f2d5cd3-dec3-4f05-bda5-ecddf7899c27",
+          "orphaned": false,
+          "worktreeId": "wt_3",
+          "tabId": "5713c4f0-3fff-40cb-94a2-99fe74980758",
+          "leafId": "de0e55b6-5e04-46d3-9cab-ec8436f2167f",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": null,
+          "hasTitle": false
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:6>",
+          "incarnationId": "976d4a0e-1396-40a3-9e2d-2342191c4c93",
+          "orphaned": false,
+          "worktreeId": "wt_4",
+          "tabId": "5cc8de54-1799-41fc-81d6-22c88a9783da",
+          "leafId": "460b5233-444a-4e55-91c1-ea84ef4a1843",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": null,
+          "hasTitle": false
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:7>",
+          "incarnationId": "5ee0547c-a9b7-49af-8115-cb1466f44151",
+          "orphaned": false,
+          "worktreeId": "wt_2",
+          "tabId": "a426984c-d621-4420-866f-a2108c948982",
+          "leafId": "6df3a964-3259-47b6-9336-6d64846663cc",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1785284800985,
+          "hasTitle": false
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:8>",
+          "incarnationId": "97ef4ad6-701b-4a16-8f1d-40690f7553a6",
+          "orphaned": false,
+          "worktreeId": "wt_4",
+          "tabId": "513e1ec9-5994-4c25-a9b1-8e3a5603cc1b",
+          "leafId": "3e9b4487-5a6d-4ded-ab6a-f4c18da683b8",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": null,
+          "hasTitle": false
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:9>",
+          "incarnationId": "aa4c9611-6d50-4769-906b-48deea78a9e0",
+          "orphaned": false,
+          "worktreeId": "wt_0",
+          "tabId": "bd9fc850-d3ba-463f-871b-441f47bffa0e",
+          "leafId": "360485d0-7f6e-43df-87f7-1f5346f7ee2a",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1785610191080,
+          "hasTitle": true
+        }
+      ]
+    }
+  }
+}

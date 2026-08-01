@@ -29,22 +29,85 @@ const STRIPPED_FIELDS = [
   "comment",
 ] as const;
 
-export function redactWorktree(wt: OrcaWorktreeRecord, index: number): RedactedWorktreeRecord {
-  const repoHint = wt.worktreeId.includes("::") ? wt.worktreeId.split("::")[0] : wt.worktreeId;
+/** True when a string may embed an absolute user path or home directory. */
+export function isPathLike(value: string): boolean {
+  if (value.length === 0) return false;
+  if (value.includes("/Users/") || value.includes("/home/") || value.includes("\\Users\\")) return true;
+  if (value.includes("::/") || value.includes("::\\")) return true;
+  if (value.startsWith("/") || value.startsWith("~/") || value.startsWith("~\\")) return true;
+  if (/^[A-Za-z]:[\\/]/.test(value)) return true;
+  return false;
+}
+
+function safeToken(value: string | undefined | null, fallback: string): string | undefined {
+  if (value == null) return undefined;
+  if (value.length === 0) return undefined;
+  if (isPathLike(value)) return fallback;
+  return value;
+}
+
+function safeOptional(value: string | undefined | null): string | undefined {
+  if (value == null || value.length === 0) return undefined;
+  if (isPathLike(value)) return undefined;
+  return value;
+}
+
+/**
+ * Build a deterministic raw worktreeId → fixture worktreeId map for one bundle.
+ * Path-bearing IDs become wt_<n>; safe IDs are preserved. Same map must be used
+ * for worktree and terminal records so joins stay coherent.
+ */
+export function buildWorktreeIdMap(
+  worktrees: readonly OrcaWorktreeRecord[],
+  terminals: readonly OrcaTerminalRecord[],
+): Map<string, string> {
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+  for (const wt of worktrees) {
+    if (!seen.has(wt.worktreeId)) {
+      seen.add(wt.worktreeId);
+      ordered.push(wt.worktreeId);
+    }
+  }
+  for (const term of terminals) {
+    if (!seen.has(term.worktreeId)) {
+      seen.add(term.worktreeId);
+      ordered.push(term.worktreeId);
+    }
+  }
+
+  const map = new Map<string, string>();
+  let pathIndex = 0;
+  for (const raw of ordered) {
+    if (isPathLike(raw)) {
+      map.set(raw, `wt_${pathIndex}`);
+      pathIndex += 1;
+    } else {
+      map.set(raw, raw);
+    }
+  }
+  return map;
+}
+
+export function redactWorktree(
+  wt: OrcaWorktreeRecord,
+  index: number,
+  worktreeIdMap: ReadonlyMap<string, string>,
+): RedactedWorktreeRecord {
+  const worktreeId = worktreeIdMap.get(wt.worktreeId) ?? `wt_${index}`;
   return {
     workspaceKind: wt.workspaceKind,
-    worktreeId: wt.worktreeId,
-    repoId: wt.repoId,
-    hostId: wt.hostId,
+    worktreeId,
+    repoId: safeToken(wt.repoId, `<redacted-repo-id:#${index}>`),
+    hostId: safeToken(wt.hostId, `<redacted-host:#${index}>`) ?? "local",
     terminalPlatform: wt.terminalPlatform,
-    repo: wt.repo,
-    pathPlaceholder: `<redacted-path:${repoHint ?? "wt"}#${index}>`,
-    branch: wt.branch && wt.branch.length > 0 ? wt.branch : undefined,
+    repo: safeToken(wt.repo, `<redacted-repo:#${index}>`),
+    pathPlaceholder: `<redacted-path:#${index}>`,
+    branch: safeOptional(wt.branch),
     isArchived: wt.isArchived,
     isMainWorktree: wt.isMainWorktree,
-    worktreeInstanceId: wt.worktreeInstanceId,
-    displayName: wt.displayName,
-    workspaceStatus: wt.workspaceStatus,
+    worktreeInstanceId: safeToken(wt.worktreeInstanceId, `<redacted-wti:#${index}>`),
+    displayName: safeToken(wt.displayName, `<redacted-name:#${index}>`),
     isActive: wt.isActive,
     unread: wt.unread,
     liveTerminalCount: wt.liveTerminalCount,
@@ -66,12 +129,17 @@ export function redactWorktree(wt: OrcaWorktreeRecord, index: number): RedactedW
   };
 }
 
-export function redactTerminal(term: OrcaTerminalRecord, index: number): RedactedTerminalRecord {
+export function redactTerminal(
+  term: OrcaTerminalRecord,
+  index: number,
+  worktreeIdMap: ReadonlyMap<string, string>,
+): RedactedTerminalRecord {
+  const worktreeId = worktreeIdMap.get(term.worktreeId) ?? `wt_orphan_${index}`;
   return {
     handlePlaceholder: `<redacted-handle:${index}>`,
-    incarnationId: term.incarnationId,
+    incarnationId: safeToken(term.incarnationId, `<redacted-inc:#${index}>`),
     orphaned: term.orphaned,
-    worktreeId: term.worktreeId,
+    worktreeId,
     tabId: term.tabId,
     leafId: term.leafId,
     connected: term.connected,
@@ -118,8 +186,11 @@ export function buildRedactedFixture(input: {
   capturedAt?: string;
   orcaAppVersion?: string;
 }): RedactedFixtureBundle {
-  const worktrees = (input.worktreePs.result?.worktrees ?? []).map((wt, i) => redactWorktree(wt, i));
-  const terminals = (input.terminalList.result?.terminals ?? []).map((t, i) => redactTerminal(t, i));
+  const rawWorktrees = input.worktreePs.result?.worktrees ?? [];
+  const rawTerminals = input.terminalList.result?.terminals ?? [];
+  const worktreeIdMap = buildWorktreeIdMap(rawWorktrees, rawTerminals);
+  const worktrees = rawWorktrees.map((wt, i) => redactWorktree(wt, i, worktreeIdMap));
+  const terminals = rawTerminals.map((t, i) => redactTerminal(t, i, worktreeIdMap));
   const meta: FixtureMeta = {
     schemaVersion: SCHEMA_VERSION,
     provenance: input.provenance,
@@ -129,7 +200,8 @@ export function buildRedactedFixture(input: {
     notes: input.notes,
     redaction: {
       strippedFields: [...STRIPPED_FIELDS],
-      pathPolicy: "absolute paths replaced with pathPlaceholder derived from worktreeId",
+      pathPolicy:
+        "absolute paths and path-bearing worktreeIds replaced via deterministic per-bundle wt_<n> map shared by worktrees and terminals; pathPlaceholder is index-only",
       handlePolicy:
         "live runtime handles replaced with handlePlaceholder; never restore as command targets from fixtures",
     },
