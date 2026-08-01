@@ -133,6 +133,20 @@ export type ControlViewModel = {
   focusHighlighted: boolean;
   focusEnabled: boolean;
   ackEnabled: boolean;
+  /** True when selected session can receive background mutations. */
+  mutationEnabled: boolean;
+  /** Provider preset key for selected agent (omp|claude|codex|unknown). */
+  presetKey: "omp" | "claude" | "codex" | "unknown";
+  /** Four presets enabled when mutation gate passes. */
+  presetsEnabled: boolean;
+  /** Retry only when a deterministic public operation exists. */
+  retryEnabled: boolean;
+  retryDetail: string;
+  /** Interrupt/hold-close enabled under mutation gate. */
+  interruptEnabled: boolean;
+  /** Structured options always fail-closed without typed public contract. */
+  structuredReplyEnabled: boolean;
+  structuredReplyDetail: string;
   orcaReady: boolean;
   urgency: "working" | "idle" | "empty";
   issues: string[];

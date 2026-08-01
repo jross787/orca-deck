@@ -6,6 +6,7 @@
 import streamDeck from "@elgato/streamdeck";
 import {
   AcknowledgeAction,
+  createSafeControlActions,
   FocusAction,
   NextAttentionAction,
 } from "./actions/controls.js";
@@ -35,6 +36,7 @@ const sessionActions = createSessionActions({ runtime: dashboardRuntime });
 const nextAttentionAction = new NextAttentionAction({ runtime: dashboardRuntime });
 const focusAction = new FocusAction({ runtime: dashboardRuntime });
 const acknowledgeAction = new AcknowledgeAction({ runtime: dashboardRuntime });
+const safeControlActions = createSafeControlActions({ runtime: dashboardRuntime });
 
 async function sendPi(response: PiResponse): Promise<void> {
   try {
@@ -136,6 +138,9 @@ for (const sessionAction of sessionActions) {
 streamDeck.actions.registerAction(nextAttentionAction);
 streamDeck.actions.registerAction(focusAction);
 streamDeck.actions.registerAction(acknowledgeAction);
+for (const controlAction of safeControlActions) {
+  streamDeck.actions.registerAction(controlAction);
+}
 
 void bootstrap()
   .catch((err) => {

@@ -1,6 +1,6 @@
 {
   "Name": "Orca Agent Deck",
-  "Version": "0.2.0.0",
+  "Version": "0.3.0.0",
   "Author": "Orca Deck",
   "Actions": [
     {
@@ -189,12 +189,84 @@
       "Controllers": ["Keypad"],
       "UserTitleEnabled": false,
       "States": [{ "Image": "imgs/actions/acknowledge/key", "TitleAlignment": "middle", "ShowTitle": false }]
+    },
+    {
+      "Name": "Interrupt / Hold Close",
+      "UUID": "dev.onorca.agent-deck.interrupt-close",
+      "Icon": "imgs/actions/interrupt-close/icon",
+      "Tooltip": "Short press interrupts; hold closes the selected terminal after refresh/rejoin.",
+      "Controllers": ["Keypad"],
+      "UserTitleEnabled": false,
+      "States": [{ "Image": "imgs/actions/interrupt-close/key", "TitleAlignment": "middle", "ShowTitle": false }]
+    },
+    {
+      "Name": "Finish",
+      "UUID": "dev.onorca.agent-deck.preset-1",
+      "Icon": "imgs/actions/preset-1/icon",
+      "Tooltip": "Send provider Finish preset to the selected fresh writable terminal.",
+      "Controllers": ["Keypad"],
+      "UserTitleEnabled": false,
+      "States": [{ "Image": "imgs/actions/preset-1/key", "TitleAlignment": "middle", "ShowTitle": false }]
+    },
+    {
+      "Name": "Checks",
+      "UUID": "dev.onorca.agent-deck.preset-2",
+      "Icon": "imgs/actions/preset-2/icon",
+      "Tooltip": "Send provider Checks preset to the selected fresh writable terminal.",
+      "Controllers": ["Keypad"],
+      "UserTitleEnabled": false,
+      "States": [{ "Image": "imgs/actions/preset-2/key", "TitleAlignment": "middle", "ShowTitle": false }]
+    },
+    {
+      "Name": "Review",
+      "UUID": "dev.onorca.agent-deck.preset-3",
+      "Icon": "imgs/actions/preset-3/icon",
+      "Tooltip": "Send provider Review preset to the selected fresh writable terminal.",
+      "Controllers": ["Keypad"],
+      "UserTitleEnabled": false,
+      "States": [{ "Image": "imgs/actions/preset-3/key", "TitleAlignment": "middle", "ShowTitle": false }]
+    },
+    {
+      "Name": "Draft",
+      "UUID": "dev.onorca.agent-deck.draft",
+      "Icon": "imgs/actions/draft-placeholder/icon",
+      "Tooltip": "Draft overlay placeholder — Phase 4 non-executing.",
+      "Controllers": ["Keypad"],
+      "UserTitleEnabled": false,
+      "States": [{ "Image": "imgs/actions/draft-placeholder/key", "TitleAlignment": "middle", "ShowTitle": false }]
+    },
+    {
+      "Name": "Ship",
+      "UUID": "dev.onorca.agent-deck.preset-4",
+      "Icon": "imgs/actions/preset-4/icon",
+      "Tooltip": "Send provider Ship preset to the selected fresh writable terminal.",
+      "Controllers": ["Keypad"],
+      "UserTitleEnabled": false,
+      "States": [{ "Image": "imgs/actions/preset-4/key", "TitleAlignment": "middle", "ShowTitle": false }]
+    },
+    {
+      "Name": "Retry",
+      "UUID": "dev.onorca.agent-deck.retry",
+      "Icon": "imgs/actions/retry/icon",
+      "Tooltip": "Retry when a deterministic public CLI operation exists; otherwise FOCUS REQUIRED.",
+      "Controllers": ["Keypad"],
+      "UserTitleEnabled": false,
+      "States": [{ "Image": "imgs/actions/retry/key", "TitleAlignment": "middle", "ShowTitle": false }]
+    },
+    {
+      "Name": "Structured Reply",
+      "UUID": "dev.onorca.agent-deck.structured-reply",
+      "Icon": "imgs/actions/structured-reply/icon",
+      "Tooltip": "Structured options fail-closed without typed public prompt/reply contract.",
+      "Controllers": ["Keypad"],
+      "UserTitleEnabled": false,
+      "States": [{ "Image": "imgs/actions/structured-reply/key", "TitleAlignment": "middle", "ShowTitle": false }]
     }
   ],
   "Category": "Orca Agent Deck",
   "CategoryIcon": "imgs/plugin/category-icon",
   "CodePath": "bin/plugin.js",
-  "Description": "Stream Deck XL deck for Orca agent terminals. Phase 2 ships the sixteen-card attention dashboard.",
+  "Description": "Stream Deck XL deck for Orca agent terminals. Phase 3 adds safe background controls.",
   "Icon": "imgs/plugin/marketplace",
   "SDKVersion": 3,
   "Software": {

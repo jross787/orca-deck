@@ -7,6 +7,8 @@ import type { LogicalSession } from "../orca/discovery.js";
 import type { AgentType, KnownAgentState } from "../orca/schema.js";
 import { allocateSlots, emptySlotAssignment } from "./slots.js";
 import { pickNextAttention } from "./attention.js";
+import { agentTypeToPresetKey } from "../commands/presets.js";
+import { evaluateRetrySupport } from "../commands/retry.js";
 import {
   sameEventVersion,
   SLOT_COUNT,
@@ -805,6 +807,24 @@ export function selectDashboardSnapshot(
       state.orcaReady,
   );
   const ackEnabled = Boolean(selected && selected.unread);
+  const mutationEnabled = Boolean(focusEnabled);
+  const presetKey = agentTypeToPresetKey(selected?.agentType);
+  const presetsEnabled = mutationEnabled;
+  const interruptEnabled = mutationEnabled;
+  // Installed public CLI has no deterministic retry command — always fail closed.
+  const liveSelected =
+    (state.selectedLogicalSessionId
+      ? state.liveById.get(state.selectedLogicalSessionId)
+      : undefined) ?? undefined;
+  const retryEval = evaluateRetrySupport({
+    session: liveSelected,
+    publicRetryCommands: [],
+  });
+  const retryEnabled = Boolean(mutationEnabled && retryEval.supported);
+  const retryDetail = retryEval.supported ? retryEval.commandName : "FOCUS REQUIRED";
+  // No typed public prompt/options contract — structured options stay disabled.
+  const structuredReplyEnabled = false;
+  const structuredReplyDetail = "REPLY UNAVAILABLE";
 
   let urgency: ControlViewModel["urgency"] = "empty";
   if (!state.orcaReady || cards.length === 0) urgency = "empty";
@@ -838,6 +858,14 @@ export function selectDashboardSnapshot(
       focusHighlighted,
       focusEnabled,
       ackEnabled,
+      mutationEnabled,
+      presetKey,
+      presetsEnabled,
+      retryEnabled,
+      retryDetail,
+      interruptEnabled,
+      structuredReplyEnabled,
+      structuredReplyDetail,
       orcaReady: state.orcaReady,
       urgency,
       issues: [...state.issues],

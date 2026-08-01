@@ -224,74 +224,188 @@ export function emptySlotSvgDataUrl(slotIndex: number, options: SessionSvgOption
   return `data:image/svg+xml,${encodeURIComponent(renderEmptySlotSvg(slotIndex, options))}`;
 }
 
-export type ControlKind = "next" | "focus" | "acknowledge";
+export type BasicControlKind = "next" | "focus" | "acknowledge";
+
+export type SafeControlKind =
+  | "interrupt-close"
+  | "preset-1"
+  | "preset-2"
+  | "preset-3"
+  | "preset-4"
+  | "retry"
+  | "structured-reply"
+  | "draft";
+
+export type ControlKind = BasicControlKind | SafeControlKind;
+
+export type ControlSvgOptions = SessionSvgOptions & {
+  /** Hold-to-close progress 0..1 for interrupt-close face. */
+  progress?: number;
+};
+
+type ControlFaceInput = Pick<
+  ControlViewModel,
+  | "overflowCount"
+  | "focusHighlighted"
+  | "focusEnabled"
+  | "ackEnabled"
+  | "nextTargetId"
+  | "selectedLogicalSessionId"
+  | "orcaReady"
+> &
+  Partial<
+    Pick<
+      ControlViewModel,
+      | "mutationEnabled"
+      | "presetsEnabled"
+      | "retryEnabled"
+      | "retryDetail"
+      | "interruptEnabled"
+      | "structuredReplyEnabled"
+      | "structuredReplyDetail"
+      | "presetKey"
+    >
+  >;
+
+function controlFace(
+  kind: ControlKind,
+  control: ControlFaceInput,
+  progress: number,
+): { title: string; detail: string; color: string; border: string; borderWidth: number; bar?: number } {
+  const palette = SESSION_PALETTE;
+  if (kind === "next") {
+    const overflow = control.overflowCount > 0 ? `+${control.overflowCount}` : "";
+    let detail = control.nextTargetId
+      ? truncate(control.nextTargetId.split(":").slice(-1)[0] ?? "target", 14)
+      : "none";
+    if (overflow) detail = `${detail} ${overflow}`;
+    return {
+      title: "NEXT",
+      detail,
+      color: control.nextTargetId ? palette.waiting : palette.idle,
+      border: palette.line,
+      borderWidth: 1,
+    };
+  }
+  if (kind === "focus") {
+    const enabled = control.focusEnabled;
+    return {
+      title: "FOCUS",
+      detail: control.focusHighlighted ? "NEEDS FOCUS" : enabled ? "ready" : "blocked",
+      color: control.focusHighlighted ? palette.waiting : enabled ? palette.working : palette.idle,
+      border: control.focusHighlighted ? palette.selectedBorder : palette.line,
+      borderWidth: control.focusHighlighted ? 3 : 1,
+    };
+  }
+  if (kind === "acknowledge") {
+    return {
+      title: "ACK",
+      detail: control.ackEnabled ? "clear unread" : "idle",
+      color: control.ackEnabled ? palette.done : palette.idle,
+      border: palette.line,
+      borderWidth: 1,
+    };
+  }
+  if (kind === "interrupt-close") {
+    const enabled = control.interruptEnabled === true;
+    const holding = progress > 0;
+    return {
+      title: holding && progress >= 1 ? "CLOSE" : "INT/K",
+      detail: holding
+        ? progress >= 1
+          ? "closing"
+          : `hold ${Math.round(progress * 100)}%`
+        : enabled
+          ? "tap/hold"
+          : "blocked",
+      color: holding ? (progress >= 1 ? palette.error : palette.waiting) : enabled ? palette.error : palette.idle,
+      border: holding ? palette.error : palette.line,
+      borderWidth: holding ? 3 : 1,
+      bar: holding ? Math.max(0, Math.min(1, progress)) : undefined,
+    };
+  }
+  if (kind === "preset-1" || kind === "preset-2" || kind === "preset-3" || kind === "preset-4") {
+    const labels = {
+      "preset-1": "FINISH",
+      "preset-2": "CHECKS",
+      "preset-3": "REVIEW",
+      "preset-4": "SHIP",
+    } as const;
+    const colors = {
+      "preset-1": palette.working,
+      "preset-2": palette.done,
+      "preset-3": palette.waiting,
+      "preset-4": palette.stuck,
+    } as const;
+    const enabled = control.presetsEnabled === true;
+    return {
+      title: labels[kind],
+      detail: enabled ? control.presetKey ?? "ready" : "blocked",
+      color: enabled ? colors[kind] : palette.idle,
+      border: palette.line,
+      borderWidth: 1,
+    };
+  }
+  if (kind === "retry") {
+    const enabled = control.retryEnabled === true;
+    return {
+      title: "RETRY",
+      detail: enabled ? "ready" : control.retryDetail || "FOCUS REQUIRED",
+      color: enabled ? palette.waiting : palette.idle,
+      border: palette.line,
+      borderWidth: 1,
+    };
+  }
+  if (kind === "structured-reply") {
+    return {
+      title: "REPLY",
+      detail: control.structuredReplyDetail || "REPLY UNAVAILABLE",
+      color: palette.unknown,
+      border: palette.line,
+      borderWidth: 1,
+    };
+  }
+  // draft placeholder — Phase 4 non-executing face
+  return {
+    title: "DRAFT",
+    detail: "phase 4",
+    color: palette.idle,
+    border: palette.line,
+    borderWidth: 1,
+  };
+}
 
 export function renderControlSvg(
   kind: ControlKind,
-  control: Pick<
-    ControlViewModel,
-    | "overflowCount"
-    | "focusHighlighted"
-    | "focusEnabled"
-    | "ackEnabled"
-    | "nextTargetId"
-    | "selectedLogicalSessionId"
-    | "orcaReady"
-  >,
-  options: SessionSvgOptions = {},
+  control: ControlFaceInput,
+  options: ControlSvgOptions = {},
 ): string {
   const size = options.size ?? 144;
   const palette = options.palette ?? SESSION_PALETTE;
-  let title = "CTRL";
-  let detail = "";
-  let color = palette.muted;
-
-  if (kind === "next") {
-    title = "NEXT";
-    const overflow = control.overflowCount > 0 ? `+${control.overflowCount}` : "";
-    detail = control.nextTargetId
-      ? truncate(control.nextTargetId.split(":").slice(-1)[0] ?? "target", 14)
-      : "none";
-    color = control.nextTargetId ? palette.waiting : palette.idle;
-    if (overflow) detail = `${detail} ${overflow}`;
-  } else if (kind === "focus") {
-    title = "FOCUS";
-    const enabled = control.focusEnabled;
-    color = control.focusHighlighted ? palette.waiting : enabled ? palette.working : palette.idle;
-    detail = control.focusHighlighted ? "NEEDS FOCUS" : enabled ? "ready" : "blocked";
-  } else {
-    title = "ACK";
-    const enabled = control.ackEnabled;
-    color = enabled ? palette.done : palette.idle;
-    detail = enabled ? "clear unread" : "idle";
-  }
-
-  const border = kind === "focus" && control.focusHighlighted ? palette.selectedBorder : palette.line;
-  const borderWidth = kind === "focus" && control.focusHighlighted ? 3 : 1;
+  const progress = options.progress ?? 0;
+  const face = controlFace(kind, control, progress);
+  const barWidth = face.bar != null ? Math.round(120 * face.bar) : 0;
+  const barSvg =
+    face.bar != null
+      ? `<rect x="12" y="122" width="120" height="8" rx="3" fill="${palette.line}"/>
+  <rect x="12" y="122" width="${barWidth}" height="8" rx="3" fill="${face.color}"/>`
+      : "";
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="${title}">
+<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="${face.title}">
   <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
-  <rect x="6" y="6" width="132" height="132" rx="8" fill="${palette.panel}" stroke="${border}" stroke-width="${borderWidth}"/>
-  <text x="72" y="48" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="2">ORCA</text>
-  <text x="72" y="82" text-anchor="middle" fill="${color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" font-weight="700" letter-spacing="2">${title}</text>
-  <text x="72" y="110" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">${escapeXml(detail)}</text>
+  <rect x="6" y="6" width="132" height="132" rx="8" fill="${palette.panel}" stroke="${face.border}" stroke-width="${face.borderWidth}"/>
+  <text x="72" y="42" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11" letter-spacing="2">ORCA</text>
+  <text x="72" y="78" text-anchor="middle" fill="${face.color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700" letter-spacing="1">${face.title}</text>
+  <text x="72" y="104" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="11">${escapeXml(face.detail)}</text>
+  ${barSvg}
 </svg>`;
 }
 
 export function controlSvgDataUrl(
   kind: ControlKind,
-  control: Pick<
-    ControlViewModel,
-    | "overflowCount"
-    | "focusHighlighted"
-    | "focusEnabled"
-    | "ackEnabled"
-    | "nextTargetId"
-    | "selectedLogicalSessionId"
-    | "orcaReady"
-  >,
-  options: SessionSvgOptions = {},
+  control: ControlFaceInput,
+  options: ControlSvgOptions = {},
 ): string {
   return `data:image/svg+xml,${encodeURIComponent(renderControlSvg(kind, control, options))}`;
 }

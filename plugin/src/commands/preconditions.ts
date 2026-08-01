@@ -3,8 +3,15 @@
  */
 import { canMutateSession, type LogicalSession } from "../orca/discovery.js";
 import type { StructuredReplyCapability } from "../orca/capabilities.js";
+import { evaluateRetrySupport } from "./retry.js";
 
-export type MutationKind = "focus" | "preset_send" | "interrupt" | "close" | "structured_reply";
+export type MutationKind =
+  | "focus"
+  | "preset_send"
+  | "interrupt"
+  | "close"
+  | "retry"
+  | "structured_reply";
 
 export type PreconditionResult =
   | { ok: true }
@@ -14,7 +21,10 @@ export function checkMutationPreconditions(input: {
   session: LogicalSession | undefined;
   kind: MutationKind;
   structuredReply?: StructuredReplyCapability;
+  publicRetryCommands?: readonly string[];
   orcaReady?: boolean;
+  /** Empty preset text is blocked before send. */
+  presetText?: string;
 }): PreconditionResult {
   if (input.orcaReady === false) {
     return { ok: false, code: "orca_unavailable", message: "Orca runtime is not ready." };
@@ -30,6 +40,7 @@ export function checkMutationPreconditions(input: {
       message: `Mutation blocked: join health is ${gate.reason ?? "unknown"}.`,
     };
   }
+
   if (input.kind === "structured_reply") {
     const sr = input.structuredReply;
     if (!sr || !sr.usableViaPublicCli) {
@@ -40,5 +51,23 @@ export function checkMutationPreconditions(input: {
       };
     }
   }
+
+  if (input.kind === "retry") {
+    const retry = evaluateRetrySupport({
+      session: input.session,
+      publicRetryCommands: input.publicRetryCommands,
+      structuredReply: input.structuredReply,
+    });
+    if (!retry.supported) {
+      return { ok: false, code: retry.code, message: retry.message };
+    }
+  }
+
+  if (input.kind === "preset_send") {
+    if (typeof input.presetText !== "string" || input.presetText.length === 0) {
+      return { ok: false, code: "empty_preset", message: "Preset text is empty." };
+    }
+  }
+
   return { ok: true };
 }

@@ -45,7 +45,14 @@ const blockedReply = evaluateStructuredReply({
 describe("checkMutationPreconditions", () => {
   it("allows focus/send/interrupt/close only when join is healthy", () => {
     for (const kind of ["focus", "preset_send", "interrupt", "close"] as const) {
-      assert.equal(checkMutationPreconditions({ session: session(), kind }).ok, true);
+      assert.equal(
+        checkMutationPreconditions({
+          session: session(),
+          kind,
+          presetText: kind === "preset_send" ? "Finish the task." : undefined,
+        }).ok,
+        true,
+      );
     }
   });
 

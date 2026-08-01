@@ -5,6 +5,14 @@
 
 import type { ConfigStore } from "../config/store.js";
 import { checkMutationPreconditions } from "../commands/preconditions.js";
+import {
+  buildCloseArgs,
+  buildInterruptArgs,
+  buildPresetSendArgs,
+  resolvePresetText,
+  type PresetIndex,
+} from "../commands/presets.js";
+import { evaluateRetrySupport } from "../commands/retry.js";
 import type { RedactedLogger } from "../diagnostics/logger.js";
 import {
   MUTATION_COMMANDS,
@@ -19,6 +27,8 @@ import {
   emptySlotSvgDataUrl,
   sessionSvgDataUrl,
   ImageWriteDebouncer,
+  type BasicControlKind,
+  type SafeControlKind,
 } from "../rendering/session-svg.js";
 import { AlertEngine } from "./alerts.js";
 import { MetadataStore } from "./metadata-store.js";
@@ -41,6 +51,13 @@ export type PaintTarget = {
   showAlert?: () => Promise<void> | void;
 };
 
+export type MutationRunner = (
+  args: readonly string[],
+  cli: OrcaCliOptions,
+) => Promise<void>;
+
+export type TimerHandle = { clear: () => void };
+
 export type DashboardRuntimeDeps = {
   configStore: ConfigStore;
   logger: RedactedLogger;
@@ -50,13 +67,40 @@ export type DashboardRuntimeDeps = {
   refresh?: typeof refreshDiscovery;
   /** Injected focus runner for tests. */
   runFocus?: (handle: string, cli: OrcaCliOptions) => Promise<void>;
+  /** Injected mutation runner (preset/interrupt/close) for tests. */
+  runMutation?: MutationRunner;
   nowMs?: () => number;
+  /**
+   * Testable timer. Defaults to setTimeout.
+   * `fn` may return a Promise; tests can await the scheduled callback result.
+   */
+  schedule?: (fn: () => void | Promise<void>, ms: number) => TimerHandle;
 };
 
 type Listener = (snap: DashboardSnapshot) => void;
 
+export type RuntimeControlKind =
+  | BasicControlKind
+  | SafeControlKind
+  | "draft";
+
+type HoldGesture = {
+  token: number;
+  logicalSessionId: string;
+  targetId: string;
+  /** true once threshold fire started or completed close path */
+  closedOrClosing: boolean;
+  /** true once short-release interrupt started */
+  interrupted: boolean;
+  /** true once any terminal outcome committed (success or fail feedback) */
+  settled: boolean;
+  timer: TimerHandle | null;
+  startedAtMs: number;
+  holdMs: number;
+};
+
 /**
- * Shared runtime used by all 16 session slots + Next/Focus/Ack.
+ * Shared runtime used by all 16 session slots + contextual controls.
  */
 export class DashboardRuntime {
   private readonly deps: DashboardRuntimeDeps;
@@ -68,16 +112,17 @@ export class DashboardRuntime {
   private snapshot: DashboardSnapshot;
   private readonly scheduler: PollScheduler;
   private readonly sessionTargets = new Map<number, Set<PaintTarget>>();
-  private readonly controlTargets = {
-    next: new Set<PaintTarget>(),
-    focus: new Set<PaintTarget>(),
-    acknowledge: new Set<PaintTarget>(),
-  };
+  private readonly controlTargets = new Map<RuntimeControlKind, Set<PaintTarget>>();
   private demand = 0;
   private ready: Promise<void>;
   private persistTimer: NodeJS.Timeout | null = null;
   /** Shared in-flight refresh — all concurrent callers await the same tick. */
   private refreshInFlight: Promise<DashboardSnapshot> | null = null;
+  private holdGesture: HoldGesture | null = null;
+  private holdTokenSeq = 0;
+  /** Progress paint while holding interrupt/close. */
+  private holdProgressRatio = 0;
+  private holdProgressTargetId: string | null = null;
 
   constructor(deps: DashboardRuntimeDeps) {
     this.deps = deps;
@@ -117,6 +162,14 @@ export class DashboardRuntime {
     return this.deps.nowMs?.() ?? Date.now();
   }
 
+  private schedule(fn: () => void | Promise<void>, ms: number): TimerHandle {
+    if (this.deps.schedule) return this.deps.schedule(fn, ms);
+    const t = setTimeout(fn, ms);
+    return {
+      clear: () => clearTimeout(t),
+    };
+  }
+
   private readIntervals(): SchedulerIntervals {
     const p = this.deps.configStore.getConfig().polling;
     return {
@@ -135,6 +188,14 @@ export class DashboardRuntime {
     };
   }
 
+  private async runMutationArgs(args: readonly string[]): Promise<void> {
+    if (this.deps.runMutation) {
+      await this.deps.runMutation(args, this.cliOpts());
+      return;
+    }
+    await runOrca(args, this.cliOpts());
+  }
+
   async whenReady(): Promise<void> {
     await this.ready;
   }
@@ -145,6 +206,11 @@ export class DashboardRuntime {
 
   getStateForTests(): DashboardState {
     return this.state;
+  }
+
+  /** Test helper: current hold gesture progress 0..1, or 0. */
+  getHoldProgressForTests(): number {
+    return this.holdProgressRatio;
   }
 
   /** Test/helper: force scheduler to re-read intervals after config patch. */
@@ -187,14 +253,22 @@ export class DashboardRuntime {
     if (set.size === 0) this.sessionTargets.delete(slotIndex);
   }
 
-  registerControlTarget(kind: "next" | "focus" | "acknowledge", target: PaintTarget): void {
-    this.controlTargets[kind].add(target);
+  registerControlTarget(kind: RuntimeControlKind, target: PaintTarget): void {
+    let set = this.controlTargets.get(kind);
+    if (!set) {
+      set = new Set();
+      this.controlTargets.set(kind, set);
+    }
+    set.add(target);
     void this.paintControl(kind, target);
   }
 
-  unregisterControlTarget(kind: "next" | "focus" | "acknowledge", target: PaintTarget): void {
-    this.controlTargets[kind].delete(target);
+  unregisterControlTarget(kind: RuntimeControlKind, target: PaintTarget): void {
+    const set = this.controlTargets.get(kind);
+    if (!set) return;
+    set.delete(target);
     this.debouncer.clear(target.id);
+    if (set.size === 0) this.controlTargets.delete(kind);
   }
 
   async refresh(): Promise<DashboardSnapshot> {
@@ -375,12 +449,329 @@ export class DashboardRuntime {
     return this.snapshot;
   }
 
+  /**
+   * Safe preset send for provider index 0..3.
+   * Captures key-down logical id, refreshes, rejoins fresh handle, exact argv once.
+   * Never logs/persists preset text. Does not terminal switch / activate / ack.
+   */
+  async sendPreset(index: PresetIndex, initiatingTargetId?: string): Promise<DashboardSnapshot> {
+    await this.ready;
+    const selectedId = this.state.selectedLogicalSessionId;
+    const kind = presetKind(index);
+    if (!selectedId) {
+      await this.flashControlTarget(kind, false, initiatingTargetId);
+      await this.refresh();
+      return this.snapshot;
+    }
+
+    await this.refresh();
+    const session = this.findLiveSession(selectedId);
+    const cfg = this.deps.configStore.getConfig();
+    const resolved = resolvePresetText(cfg, session?.agentType, index);
+    const gate = checkMutationPreconditions({
+      session,
+      kind: "preset_send",
+      orcaReady: this.snapshot.orcaReady,
+      presetText: resolved.text,
+    });
+    if (!gate.ok || !session?.runtimeHandle) {
+      this.deps.logger.warn(
+        "preset_blocked",
+        {
+          code: gate.ok ? "missing_handle" : gate.code,
+          presetIndex: index,
+          presetKey: resolved.key,
+        },
+        { ids: { logicalSessionId: selectedId } },
+      );
+      await this.flashControlTarget(kind, false, initiatingTargetId);
+      await this.refresh();
+      return this.snapshot;
+    }
+
+    const handle = session.runtimeHandle;
+    const args = buildPresetSendArgs(handle, resolved.text);
+    try {
+      await this.runMutationArgs(args);
+      this.deps.logger.info(
+        "preset_sent",
+        { presetIndex: index, presetKey: resolved.key },
+        { ids: { logicalSessionId: selectedId } },
+      );
+      await this.flashControlTarget(kind, true, initiatingTargetId);
+    } catch (err) {
+      const code = err instanceof OrcaCliError ? err.code : "error";
+      this.deps.logger.error(
+        "preset_failed",
+        { code, presetIndex: index, presetKey: resolved.key },
+        { ids: { logicalSessionId: selectedId } },
+      );
+      await this.flashControlTarget(kind, false, initiatingTargetId);
+    }
+    await this.refresh();
+    return this.snapshot;
+  }
+
+  /**
+   * Retry — fail closed unless a deterministic public operation exists.
+   * Never guesses text/keys. No mutation on current installed contract.
+   */
+  async retrySelected(initiatingTargetId?: string): Promise<DashboardSnapshot> {
+    await this.ready;
+    const selectedId = this.state.selectedLogicalSessionId;
+    if (!selectedId) {
+      await this.flashControlTarget("retry", false, initiatingTargetId);
+      await this.refresh();
+      return this.snapshot;
+    }
+    await this.refresh();
+    const session = this.findLiveSession(selectedId);
+    const retry = evaluateRetrySupport({ session, publicRetryCommands: [] });
+    const gate = checkMutationPreconditions({
+      session,
+      kind: "retry",
+      orcaReady: this.snapshot.orcaReady,
+      publicRetryCommands: [],
+    });
+    if (!gate.ok || !retry.supported) {
+      this.deps.logger.warn(
+        "retry_blocked",
+        { code: gate.ok ? "no_public_operation" : gate.code },
+        { ids: { logicalSessionId: selectedId } },
+      );
+      await this.flashControlTarget("retry", false, initiatingTargetId);
+      await this.refresh();
+      return this.snapshot;
+    }
+    // Future path only — installed CLI never reaches here.
+    await this.flashControlTarget("retry", false, initiatingTargetId);
+    await this.refresh();
+    return this.snapshot;
+  }
+
+  /**
+   * Structured reply surface — always fail-closed without typed public contract.
+   * Never executes terminal input.
+   */
+  async structuredReplySelected(initiatingTargetId?: string): Promise<DashboardSnapshot> {
+    await this.ready;
+    const selectedId = this.state.selectedLogicalSessionId;
+    await this.refresh();
+    const session = selectedId ? this.findLiveSession(selectedId) : undefined;
+    const gate = checkMutationPreconditions({
+      session,
+      kind: "structured_reply",
+      orcaReady: this.snapshot.orcaReady,
+      structuredReply: {
+        runtimeAdvertisesQueryReplyInput: false,
+        publicCliHasTerminalQuery: false,
+        publicCliHasTerminalReply: false,
+        usableViaPublicCli: false,
+        status: "blocked_missing_public_cli",
+        detail: "Structured reply public CLI contract is unavailable.",
+        futurePublicContract: {
+          proposedCommands: ["terminal query", "terminal reply"],
+          requiredFlags: ["--terminal", "--json"],
+          notes: [],
+        },
+      },
+    });
+    this.deps.logger.warn(
+      "structured_reply_blocked",
+      { code: gate.ok ? "structured_reply_unavailable" : gate.code },
+      selectedId ? { ids: { logicalSessionId: selectedId } } : undefined,
+    );
+    await this.flashControlTarget("structured-reply", false, initiatingTargetId);
+    await this.refresh();
+    return this.snapshot;
+  }
+
+  /**
+   * Interrupt/hold-close key down: capture logical id + start hold timer (hot-reloaded ms).
+   */
+  beginInterruptHold(targetId: string): void {
+    const selectedId = this.state.selectedLogicalSessionId;
+    // Cancel any prior incomplete gesture idempotently.
+    this.clearHoldGesture({ paint: false });
+    if (!selectedId) {
+      void this.flashControlTarget("interrupt-close", false, targetId);
+      return;
+    }
+    const holdMs = this.deps.configStore.getConfig().holdToCloseMs;
+    const token = ++this.holdTokenSeq;
+    const gesture: HoldGesture = {
+      token,
+      logicalSessionId: selectedId,
+      targetId,
+      closedOrClosing: false,
+      interrupted: false,
+      settled: false,
+      timer: null,
+      startedAtMs: this.now(),
+      holdMs,
+    };
+    this.holdGesture = gesture;
+    this.holdProgressRatio = 0;
+    this.holdProgressTargetId = targetId;
+    void this.paintControl("interrupt-close");
+
+    gesture.timer = this.schedule(() => {
+      return this.onHoldThreshold(token);
+    }, holdMs);
+  }
+
+  /**
+   * Key up / release before threshold → one interrupt; after close → no-op.
+   */
+  async endInterruptHold(targetId?: string): Promise<DashboardSnapshot> {
+    await this.ready;
+    const g = this.holdGesture;
+    if (!g) {
+      return this.snapshot;
+    }
+    if (targetId && g.targetId !== targetId) {
+      return this.snapshot;
+    }
+    if (g.closedOrClosing || g.interrupted || g.settled) {
+      // Threshold already owns the outcome (or duplicate up).
+      if (g.timer) {
+        g.timer.clear();
+        g.timer = null;
+      }
+      return this.snapshot;
+    }
+    // Short release: cancel close timer, send interrupt once.
+    if (g.timer) {
+      g.timer.clear();
+      g.timer = null;
+    }
+    g.interrupted = true;
+    g.settled = true;
+    const logicalId = g.logicalSessionId;
+    const initiating = g.targetId;
+    this.holdProgressRatio = 0;
+    this.holdProgressTargetId = null;
+    this.holdGesture = null;
+
+    await this.refresh();
+    const session = this.findLiveSession(logicalId);
+    const gate = checkMutationPreconditions({
+      session,
+      kind: "interrupt",
+      orcaReady: this.snapshot.orcaReady,
+    });
+    if (!gate.ok || !session?.runtimeHandle) {
+      this.deps.logger.warn(
+        "interrupt_blocked",
+        { code: gate.ok ? "missing_handle" : gate.code },
+        { ids: { logicalSessionId: logicalId } },
+      );
+      await this.flashControlTarget("interrupt-close", false, initiating);
+      await this.refresh();
+      return this.snapshot;
+    }
+    const handle = session.runtimeHandle;
+    try {
+      await this.runMutationArgs(buildInterruptArgs(handle));
+      this.deps.logger.info("interrupt_sent", {}, { ids: { logicalSessionId: logicalId } });
+      await this.flashControlTarget("interrupt-close", true, initiating);
+    } catch (err) {
+      const code = err instanceof OrcaCliError ? err.code : "error";
+      this.deps.logger.error("interrupt_failed", { code }, { ids: { logicalSessionId: logicalId } });
+      await this.flashControlTarget("interrupt-close", false, initiating);
+    }
+    await this.refresh();
+    return this.snapshot;
+  }
+
+  /**
+   * willDisappear / cancel: drop timer without mutation if not already firing.
+   */
+  cancelInterruptHold(targetId?: string): void {
+    const g = this.holdGesture;
+    if (!g) return;
+    if (targetId && g.targetId !== targetId) return;
+    if (g.closedOrClosing || g.interrupted) {
+      // In-flight mutation owns outcome; just detach timer.
+      if (g.timer) {
+        g.timer.clear();
+        g.timer = null;
+      }
+      return;
+    }
+    this.clearHoldGesture({ paint: true });
+  }
+
+  private async onHoldThreshold(token: number): Promise<void> {
+    const g = this.holdGesture;
+    if (!g || g.token !== token) return;
+    if (g.interrupted || g.closedOrClosing || g.settled) return;
+    g.closedOrClosing = true;
+    g.settled = true;
+    if (g.timer) {
+      g.timer.clear();
+      g.timer = null;
+    }
+    const logicalId = g.logicalSessionId;
+    const initiating = g.targetId;
+    this.holdProgressRatio = 1;
+    await this.paintControl("interrupt-close");
+
+    await this.refresh();
+    const session = this.findLiveSession(logicalId);
+    const gate = checkMutationPreconditions({
+      session,
+      kind: "close",
+      orcaReady: this.snapshot.orcaReady,
+    });
+    // Clear gesture before mutation so a racing key-up cannot also interrupt.
+    this.holdGesture = null;
+    this.holdProgressRatio = 0;
+    this.holdProgressTargetId = null;
+
+    if (!gate.ok || !session?.runtimeHandle) {
+      this.deps.logger.warn(
+        "close_blocked",
+        { code: gate.ok ? "missing_handle" : gate.code },
+        { ids: { logicalSessionId: logicalId } },
+      );
+      await this.flashControlTarget("interrupt-close", false, initiating);
+      await this.refresh();
+      return;
+    }
+    const handle = session.runtimeHandle;
+    try {
+      await this.runMutationArgs(buildCloseArgs(handle));
+      this.deps.logger.info("close_sent", {}, { ids: { logicalSessionId: logicalId } });
+      await this.flashControlTarget("interrupt-close", true, initiating);
+    } catch (err) {
+      const code = err instanceof OrcaCliError ? err.code : "error";
+      this.deps.logger.error("close_failed", { code }, { ids: { logicalSessionId: logicalId } });
+      await this.flashControlTarget("interrupt-close", false, initiating);
+    }
+    await this.refresh();
+  }
+
+  private clearHoldGesture(opts: { paint: boolean }): void {
+    const g = this.holdGesture;
+    if (!g) return;
+    if (g.timer) {
+      g.timer.clear();
+      g.timer = null;
+    }
+    this.holdGesture = null;
+    this.holdProgressRatio = 0;
+    this.holdProgressTargetId = null;
+    if (opts.paint) void this.paintControl("interrupt-close");
+  }
+
   private findLiveSession(logicalSessionId: string): LogicalSession | undefined {
     return this.state.liveById.get(logicalSessionId);
   }
 
   stop(): void {
     this.scheduler.stop();
+    this.clearHoldGesture({ paint: false });
     if (this.persistTimer != null) {
       clearTimeout(this.persistTimer);
       this.persistTimer = null;
@@ -418,8 +809,8 @@ export class DashboardRuntime {
       if (!targets) continue;
       for (const t of targets) writes.push(this.paintSession(slot, t));
     }
-    for (const kind of ["next", "focus", "acknowledge"] as const) {
-      for (const t of this.controlTargets[kind]) writes.push(this.paintControl(kind, t));
+    for (const [kind, targets] of this.controlTargets) {
+      for (const t of targets) writes.push(this.paintControl(kind, t));
     }
     await Promise.all(writes);
   }
@@ -431,23 +822,66 @@ export class DashboardRuntime {
     await target.setImage(image);
   }
 
-  private async paintControl(
-    kind: "next" | "focus" | "acknowledge",
-    target: PaintTarget,
-  ): Promise<void> {
-    const image = controlSvgDataUrl(kind, this.snapshot.control);
-    if (!this.debouncer.shouldWrite(target.id, image)) return;
-    await target.setImage(image);
+  private async paintControl(kind: RuntimeControlKind, only?: PaintTarget): Promise<void> {
+    const targets = only ? [only] : [...(this.controlTargets.get(kind) ?? [])];
+    if (targets.length === 0) return;
+    const writes: Promise<void>[] = [];
+    for (const target of targets) {
+      const image = this.imageForControl(kind, target.id);
+      if (!this.debouncer.shouldWrite(target.id, image)) continue;
+      writes.push(Promise.resolve(target.setImage(image)));
+    }
+    await Promise.all(writes);
   }
 
-  private async flashControls(kind: "next" | "focus" | "acknowledge", ok: boolean): Promise<void> {
+  private imageForControl(kind: RuntimeControlKind, targetId: string): string {
+    const control = this.snapshot.control;
+    if (kind === "next" || kind === "focus" || kind === "acknowledge") {
+      return controlSvgDataUrl(kind, control);
+    }
+    if (kind === "draft") {
+      return controlSvgDataUrl("draft", control);
+    }
+    const progress =
+      kind === "interrupt-close" && this.holdProgressTargetId === targetId
+        ? this.holdProgressRatio
+        : 0;
+    return controlSvgDataUrl(kind, control, { progress });
+  }
+
+  private async flashControls(kind: RuntimeControlKind, ok: boolean): Promise<void> {
     const writes: Promise<void>[] = [];
-    for (const t of this.controlTargets[kind]) {
+    for (const t of this.controlTargets.get(kind) ?? []) {
       if (ok && t.showOk) writes.push(Promise.resolve(t.showOk()));
       if (!ok && t.showAlert) writes.push(Promise.resolve(t.showAlert()));
     }
     await Promise.all(writes);
   }
+
+  private async flashControlTarget(
+    kind: RuntimeControlKind,
+    ok: boolean,
+    initiatingTargetId?: string,
+  ): Promise<void> {
+    const all = [...(this.controlTargets.get(kind) ?? [])];
+    const targets = initiatingTargetId
+      ? all.filter((t) => t.id === initiatingTargetId)
+      : all;
+    const list = targets.length > 0 ? targets : all;
+    const writes: Promise<void>[] = [];
+    for (const t of list) {
+      if (ok && t.showOk) writes.push(Promise.resolve(t.showOk()));
+      if (!ok && t.showAlert) writes.push(Promise.resolve(t.showAlert()));
+    }
+    await Promise.all(writes);
+  }
+}
+
+function presetKind(index: PresetIndex): SafeControlKind {
+  if (index === 0) return "preset-1";
+  if (index === 1) return "preset-2";
+  if (index === 2) return "preset-3";
+  return "preset-4";
 }
 
 export function cardAtSlot(snap: DashboardSnapshot, slotIndex: number): CardViewModel | null {
