@@ -46,6 +46,21 @@ export type LogicalSession = {
   stateStartedAt: number | null;
   updatedAt: number | null;
   toolName: string | null;
+  /**
+   * Display-only public model / effort / context fields when present on agent JSON.
+   * Never used for mutations. Absent → null/undefined (UI shows UNAVAILABLE).
+   */
+  model?: string | null;
+  effort?: string | null;
+  contextTokens?: number | null;
+  contextWindow?: number | null;
+  contextPercent?: number | null;
+  contextUsage?: {
+    tokens?: number;
+    contextWindow?: number;
+    percent?: number;
+    [key: string]: unknown;
+  } | null;
   runtimeHandle?: RuntimeTerminalHandle;
   tabId?: string;
   leafId?: string;
@@ -93,6 +108,58 @@ function indexTerminals(terminals: readonly OrcaTerminalRecord[]): Map<string, O
 
 function isOmpChildAgent(parentPaneKey: string | null | undefined): boolean {
   return typeof parentPaneKey === "string" && parentPaneKey.length > 0;
+}
+
+function optionalModelOverlay(agent: {
+  model?: unknown;
+  effort?: unknown;
+  reasoningEffort?: unknown;
+  thinkingLevel?: unknown;
+  contextTokens?: unknown;
+  contextWindow?: unknown;
+  contextPercent?: unknown;
+  contextUsage?: unknown;
+  [key: string]: unknown;
+}): Pick<
+  LogicalSession,
+  "model" | "effort" | "contextTokens" | "contextWindow" | "contextPercent" | "contextUsage"
+> {
+  const asStr = (v: unknown): string | null =>
+    typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
+  const asNum = (v: unknown): number | null =>
+    typeof v === "number" && Number.isFinite(v) ? v : null;
+  const model =
+    asStr(agent.model) ?? asStr(agent.modelId) ?? asStr(agent.modelName) ?? asStr(agent.model_id);
+  const effort =
+    asStr(agent.effort) ??
+    asStr(agent.reasoningEffort) ??
+    asStr(agent.thinkingLevel) ??
+    asStr(agent.thinking) ??
+    asStr(agent.reasoning_effort);
+  let contextTokens = asNum(agent.contextTokens) ?? asNum(agent.tokens);
+  let contextWindow = asNum(agent.contextWindow) ?? asNum(agent.contextLimit);
+  let contextPercent = asNum(agent.contextPercent) ?? asNum(agent.contextPct);
+  let contextUsage: LogicalSession["contextUsage"] = null;
+  const nested = agent.contextUsage;
+  if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+    const cu = nested as Record<string, unknown>;
+    contextTokens = contextTokens ?? asNum(cu.tokens) ?? asNum(cu.contextTokens);
+    contextWindow = contextWindow ?? asNum(cu.contextWindow) ?? asNum(cu.window) ?? asNum(cu.limit);
+    contextPercent = contextPercent ?? asNum(cu.percent) ?? asNum(cu.contextPercent) ?? asNum(cu.pct);
+    contextUsage = {
+      tokens: contextTokens ?? undefined,
+      contextWindow: contextWindow ?? undefined,
+      percent: contextPercent ?? undefined,
+    };
+  }
+  return {
+    model,
+    effort,
+    contextTokens,
+    contextWindow,
+    contextPercent,
+    contextUsage,
+  };
 }
 
 export function joinDiscovery(input: JoinInput): DiscoverySnapshot {
@@ -147,6 +214,7 @@ export function joinDiscovery(input: JoinInput): DiscoverySnapshot {
       const joinKey = `${wt.worktreeId}\0${agent.paneKey}`;
       const matches = byWorktreePane.get(joinKey) ?? [];
       const ompChildCount = childCounts.get(`${wt.worktreeId}\0${agent.paneKey}`) ?? 0;
+      const modelOverlay = optionalModelOverlay(agent);
       const base = {
         logicalSessionId,
         worktreeId: wt.worktreeId,
@@ -166,6 +234,7 @@ export function joinDiscovery(input: JoinInput): DiscoverySnapshot {
         stateStartedAt: agent.stateStartedAt ?? null,
         updatedAt: agent.updatedAt ?? null,
         toolName: agent.toolName ?? null,
+        ...modelOverlay,
         trackedAgentCountInWorktree,
         ompChildCount,
       };

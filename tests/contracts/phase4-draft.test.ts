@@ -959,7 +959,7 @@ describe("phase4 faces and manifest", () => {
       Version: string;
       Actions: Array<{ UUID: string; Icon: string; States: Array<{ Image: string }> }>;
     };
-    assert.equal(manifest.Version.startsWith("0.4"), true);
+    assert.equal(manifest.Version.startsWith("0.4") || manifest.Version.startsWith("0.5"), true);
     const uuids = new Set(manifest.Actions.map((a) => a.UUID));
     for (const u of [
       DRAFT_UUID,

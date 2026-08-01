@@ -76,6 +76,25 @@ export type OrcaAgentRecord = {
   interrupted?: boolean;
   stateStartedAt?: number | null;
   updatedAt?: number | null;
+  /** Display-only public model identity when present. */
+  model?: string | null;
+  modelId?: string | null;
+  modelName?: string | null;
+  /** Display-only reasoning/effort/thinking when present. */
+  effort?: string | null;
+  reasoningEffort?: string | null;
+  thinkingLevel?: string | null;
+  thinking?: string | null;
+  /** Display-only context-window metrics — never account quota. */
+  contextTokens?: number | null;
+  contextWindow?: number | null;
+  contextPercent?: number | null;
+  contextUsage?: {
+    tokens?: number;
+    contextWindow?: number;
+    percent?: number;
+    [key: string]: unknown;
+  } | null;
   [key: string]: unknown;
 };
 
@@ -321,6 +340,22 @@ const AGENT_KNOWN = new Set([
   "interrupted",
   "stateStartedAt",
   "updatedAt",
+  "model",
+  "modelId",
+  "modelName",
+  "model_id",
+  "effort",
+  "reasoningEffort",
+  "thinkingLevel",
+  "thinking",
+  "reasoning_effort",
+  "contextTokens",
+  "contextWindow",
+  "contextPercent",
+  "contextPct",
+  "contextLimit",
+  "tokens",
+  "contextUsage",
 ]);
 
 const WORKTREE_KNOWN = new Set([

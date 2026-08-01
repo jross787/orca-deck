@@ -1,6 +1,6 @@
 {
   "Name": "Orca Agent Deck",
-  "Version": "0.4.0.0",
+  "Version": "0.5.0.0",
   "Author": "Orca Deck",
   "Actions": [
     {
@@ -564,12 +564,84 @@
           "ShowTitle": false
         }
       ]
+    },
+    {
+      "Name": "OMP Usage",
+      "UUID": "dev.onorca.agent-deck.usage-omp",
+      "Icon": "imgs/actions/usage-omp/icon",
+      "Tooltip": "Active OMP count and selected OMP model/context from public worktree state. Display-only.",
+      "PropertyInspectorPath": "ui/property-inspector.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/usage-omp/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "Claude Usage",
+      "UUID": "dev.onorca.agent-deck.usage-claude",
+      "Icon": "imgs/actions/usage-claude/icon",
+      "Tooltip": "Claude account usage. UNAVAILABLE until a public Orca usage API exists.",
+      "PropertyInspectorPath": "ui/property-inspector.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/usage-claude/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "Codex Usage",
+      "UUID": "dev.onorca.agent-deck.usage-codex",
+      "Icon": "imgs/actions/usage-codex/icon",
+      "Tooltip": "Codex account usage. UNAVAILABLE until a public Orca usage API exists.",
+      "PropertyInspectorPath": "ui/property-inspector.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/usage-codex/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
+    },
+    {
+      "Name": "Model / Effort",
+      "UUID": "dev.onorca.agent-deck.model-effort",
+      "Icon": "imgs/actions/model-effort/icon",
+      "Tooltip": "Selected-session model and reasoning effort. Display-only public fields.",
+      "PropertyInspectorPath": "ui/property-inspector.html",
+      "Controllers": [
+        "Keypad"
+      ],
+      "UserTitleEnabled": false,
+      "States": [
+        {
+          "Image": "imgs/actions/model-effort/key",
+          "TitleAlignment": "middle",
+          "ShowTitle": false
+        }
+      ]
     }
   ],
   "Category": "Orca Agent Deck",
   "CategoryIcon": "imgs/plugin/category-icon",
   "CodePath": "bin/plugin.js",
-  "Description": "Stream Deck XL deck for Orca agent terminals. Phase 4 adds draft overlay and agent launch.",
+  "Description": "Stream Deck XL deck for Orca agent terminals. Phase 5 adds usage/model faces and PI polish.",
   "Icon": "imgs/plugin/marketplace",
   "SDKVersion": 3,
   "Software": {

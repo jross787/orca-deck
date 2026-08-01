@@ -31,6 +31,8 @@ export type DeckConfig = {
   paletteEnabled: boolean;
   soundEnabled: boolean;
   holdToCloseMs: number;
+  /** Usage/model face stale threshold (ms). Source timestamps older than this → STALE. */
+  usageStaleAfterMs: number;
   presets: Record<AgentPresetKey, [string, string, string, string]>;
   superwhisper?: {
     shortcut?: string;
@@ -83,6 +85,7 @@ export function defaultConfig(): DeckConfig {
     paletteEnabled: true,
     soundEnabled: true,
     holdToCloseMs: 1_500,
+    usageStaleAfterMs: 10_000,
     presets,
   };
 }
@@ -137,6 +140,7 @@ export function validateConfig(input: unknown): ConfigValidationResult {
     "paletteEnabled",
     "soundEnabled",
     "holdToCloseMs",
+    "usageStaleAfterMs",
     "presets",
     "superwhisper",
     "remoteHostFilters",
@@ -204,6 +208,12 @@ export function validateConfig(input: unknown): ConfigValidationResult {
   if (holdToCloseMs === undefined || holdToCloseMs < 500 || holdToCloseMs > 10_000) {
     issues.push(issue("holdToCloseMs", "must be integer 500..10000"));
   }
+  let usageStaleAfterMs = asInt(input.usageStaleAfterMs);
+  if (usageStaleAfterMs === undefined) {
+    usageStaleAfterMs = 10_000;
+  } else if (usageStaleAfterMs < 1_000 || usageStaleAfterMs > 300_000) {
+    issues.push(issue("usageStaleAfterMs", "must be integer 1000..300000"));
+  }
 
   const presetsRaw = input.presets;
   let presets: DeckConfig["presets"] | undefined;
@@ -266,6 +276,7 @@ export function validateConfig(input: unknown): ConfigValidationResult {
     paletteEnabled: input.paletteEnabled as boolean,
     soundEnabled: input.soundEnabled as boolean,
     holdToCloseMs: holdToCloseMs!,
+    usageStaleAfterMs: usageStaleAfterMs!,
     presets: presets!,
   };
   if (orcaExecutable !== undefined) value.orcaExecutable = orcaExecutable;

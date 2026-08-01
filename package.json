@@ -2,7 +2,7 @@
   "name": "orca-agent-deck",
   "version": "0.1.0",
   "private": true,
-  "description": "Orca Agent Deck \u2014 Stream Deck XL plugin (Phase 4 draft overlay)",
+  "description": "Orca Agent Deck \u2014 Stream Deck XL plugin (Phase 5 usage/model + PI polish)",
   "type": "module",
   "engines": {
     "node": ">=24"

@@ -4,13 +4,21 @@
  */
 import type { DeckConfig } from "../config/store.js";
 import type { HealthSnapshot } from "../health/check.js";
+import type { DiagnosticsExport } from "../usage/diagnostics.js";
 
-export type PiRequestType = "config.get" | "config.patch" | "health.refresh";
+export type PiRequestType =
+  | "config.get"
+  | "config.patch"
+  | "health.refresh"
+  | "sound.test"
+  | "diagnostics.export";
 
 export type PiRequest =
   | { type: "config.get"; requestId: string }
   | { type: "config.patch"; requestId: string; patch: Record<string, unknown> }
-  | { type: "health.refresh"; requestId: string };
+  | { type: "health.refresh"; requestId: string }
+  | { type: "sound.test"; requestId: string }
+  | { type: "diagnostics.export"; requestId: string };
 
 export type PiResponse =
   | {
@@ -32,6 +40,17 @@ export type PiResponse =
       type: "health.snapshot";
       requestId: string;
       health: HealthSnapshot;
+    }
+  | {
+      type: "sound.tested";
+      requestId: string;
+      played: boolean;
+      detail: string;
+    }
+  | {
+      type: "diagnostics.snapshot";
+      requestId: string;
+      diagnostics: DiagnosticsExport;
     }
   | {
       type: "error";
@@ -61,6 +80,12 @@ export function parsePiRequest(input: unknown):
     return { ok: true, value: { type, requestId } };
   }
   if (type === "health.refresh") {
+    return { ok: true, value: { type, requestId } };
+  }
+  if (type === "sound.test") {
+    return { ok: true, value: { type, requestId } };
+  }
+  if (type === "diagnostics.export") {
     return { ok: true, value: { type, requestId } };
   }
   if (type === "config.patch") {

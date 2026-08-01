@@ -51,6 +51,14 @@ import {
 } from "./reducer.js";
 import { PollScheduler, type SchedulerIntervals } from "./scheduler.js";
 import type { CardViewModel, ControlViewModel, DashboardSnapshot } from "./types.js";
+import {
+  buildUsageSnapshot,
+  emptyUsageSnapshot,
+  type ProviderUsageAdapter,
+  type UsageFaceKind,
+  type UsageSnapshot,
+} from "../usage/index.js";
+import { usageSvgDataUrl } from "../rendering/usage-svg.js";
 import { SLOT_COUNT } from "./types.js";
 
 export type PaintTarget = {
@@ -88,6 +96,8 @@ export type DashboardRuntimeDeps = {
   draftHelperPath?: string;
   /** Injected helper spawner for tests. */
   spawnDraftHelper?: (helperPath: string) => ChildProcessWithoutNullStreams;
+  /** Optional provider usage adapter (Claude/Codex). Default fails closed. */
+  providerUsage?: ProviderUsageAdapter;
   nowMs?: () => number;
   /**
    * Testable timer. Defaults to setTimeout.
@@ -131,6 +141,7 @@ export class DashboardRuntime {
   private readonly scheduler: PollScheduler;
   private readonly sessionTargets = new Map<number, Set<PaintTarget>>();
   private readonly controlTargets = new Map<RuntimeControlKind, Set<PaintTarget>>();
+  private readonly usageTargets = new Map<UsageFaceKind, Set<PaintTarget>>();
   private demand = 0;
   private ready: Promise<void>;
   private persistTimer: NodeJS.Timeout | null = null;
@@ -150,6 +161,9 @@ export class DashboardRuntime {
     pendingRequestId: null,
     ambiguous: false,
   };
+  /** Last topology reliability from discovery (failed refresh keeps prior faces unavailable). */
+  private lastTopologyReliable = false;
+  private usageSnapshot: UsageSnapshot;
 
   constructor(deps: DashboardRuntimeDeps) {
     this.deps = deps;
@@ -165,7 +179,7 @@ export class DashboardRuntime {
       });
     this.state = createInitialDashboardState(cfg.stuckThresholdMinutes);
     this.snapshot = selectDashboardSnapshot(this.state, deps.nowMs?.() ?? Date.now());
-
+    this.usageSnapshot = emptyUsageSnapshot(deps.nowMs?.() ?? Date.now(), cfg.usageStaleAfterMs);
     this.scheduler = new PollScheduler({
       getIntervals: () => this.readIntervals(),
       onTick: async () => {
@@ -351,6 +365,28 @@ export class DashboardRuntime {
     if (set.size === 0) this.controlTargets.delete(kind);
   }
 
+  registerUsageTarget(kind: UsageFaceKind, target: PaintTarget): void {
+    let set = this.usageTargets.get(kind);
+    if (!set) {
+      set = new Set();
+      this.usageTargets.set(kind, set);
+    }
+    set.add(target);
+    void this.paintUsage(kind, target);
+  }
+
+  unregisterUsageTarget(kind: UsageFaceKind, target: PaintTarget): void {
+    const set = this.usageTargets.get(kind);
+    if (!set) return;
+    set.delete(target);
+    this.debouncer.clear(target.id);
+    if (set.size === 0) this.usageTargets.delete(kind);
+  }
+
+  getUsageSnapshot(): UsageSnapshot {
+    return this.usageSnapshot;
+  }
+
   async refresh(): Promise<DashboardSnapshot> {
     await this.ready;
     if (this.refreshInFlight) return this.refreshInFlight;
@@ -377,6 +413,7 @@ export class DashboardRuntime {
 
     // Failed/incomplete discovery must not invent identity-lost from empty sessions.
     const topologyReliable = result.ok === true;
+    this.lastTopologyReliable = topologyReliable;
 
     this.state = reduceDashboard(this.state, {
       type: "refresh",
@@ -396,6 +433,7 @@ export class DashboardRuntime {
     else this.scheduler.noteFailure();
 
     this.snapshot = selectDashboardSnapshot(this.state, nowMs);
+    this.rebuildUsageSnapshot(nowMs);
     this.scheduler.setUrgency(
       !result.ok || !this.snapshot.orcaReady
         ? this.snapshot.cards.length === 0
@@ -431,6 +469,7 @@ export class DashboardRuntime {
     await this.ready;
     this.state = reduceDashboard(this.state, { type: "select", logicalSessionId });
     this.snapshot = selectDashboardSnapshot(this.state, this.now());
+    this.rebuildUsageSnapshot(this.now());
     this.schedulePersist();
     await this.paintAll();
     this.emit();
@@ -902,6 +941,9 @@ export class DashboardRuntime {
     for (const [kind, targets] of this.controlTargets) {
       for (const t of targets) writes.push(this.paintControl(kind, t));
     }
+    for (const [kind, targets] of this.usageTargets) {
+      for (const t of targets) writes.push(this.paintUsage(kind, t));
+    }
     await Promise.all(writes);
   }
 
@@ -932,6 +974,34 @@ export class DashboardRuntime {
       return controlSvgDataUrl(kind, control, { progress });
     }
     return controlSvgDataUrl(kind, control);
+  }
+
+  private async paintUsage(kind: UsageFaceKind, only?: PaintTarget): Promise<void> {
+    const targets = only ? [only] : [...(this.usageTargets.get(kind) ?? [])];
+    if (targets.length === 0) return;
+    const face = this.usageSnapshot.faces[kind];
+    const image = usageSvgDataUrl(face);
+    const writes: Promise<void>[] = [];
+    for (const target of targets) {
+      if (!this.debouncer.shouldWrite(target.id, image)) continue;
+      writes.push(Promise.resolve(target.setImage(image)));
+    }
+    await Promise.all(writes);
+  }
+
+  private rebuildUsageSnapshot(nowMs: number): void {
+    const cfg = this.deps.configStore.getConfig();
+    const sessions = [...this.state.liveById.values()];
+    this.usageSnapshot = buildUsageSnapshot({
+      sessions,
+      selectedLogicalSessionId: this.state.selectedLogicalSessionId,
+      orcaReady: this.state.orcaReady,
+      topologyReliable: this.lastTopologyReliable,
+      discoveryCapturedAtMs: this.lastTopologyReliable ? this.state.capturedAtMs : null,
+      evaluatedAtMs: nowMs,
+      staleAfterMs: cfg.usageStaleAfterMs ?? 10_000,
+      providerUsage: this.deps.providerUsage,
+    });
   }
 
   private withDraftFace(snap: DashboardSnapshot): DashboardSnapshot {
