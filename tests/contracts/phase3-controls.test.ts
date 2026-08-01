@@ -425,6 +425,127 @@ describe("interrupt short release vs hold close", () => {
     }
   });
 
+  it("threshold continuation does not clobber a re-begun gesture B", async () => {
+    const tmp = await mkdtemp(path.join(os.tmpdir(), "orca-deck-p3race-"));
+    try {
+      const mutations: MutationCall[] = [];
+      let fireA: (() => void | Promise<void>) | null = null;
+      let fireB: (() => void | Promise<void>) | null = null;
+      let scheduleCount = 0;
+      let gateRefresh = false;
+      let releaseRefresh: (() => void) | undefined;
+      let resolveEntered: (() => void) | undefined;
+
+      const paths = resolveConfigPaths(tmp);
+      const configStore = new ConfigStore({ paths, watch: false });
+      await configStore.load();
+      await configStore.patch({ holdToCloseMs: 1500 });
+      const logger = new RedactedLogger({
+        logPath: path.join(tmp, "p.log"),
+        sink: async () => undefined,
+      });
+
+      const runtime = new DashboardRuntime({
+        configStore,
+        logger,
+        metadataStore: new MetadataStore({ paths }),
+        alertEngine: new AlertEngine({ enabled: false, platform: "linux" }),
+        schedule: (fn) => {
+          scheduleCount += 1;
+          if (scheduleCount === 1) fireA = fn;
+          else fireB = fn;
+          return {
+            clear: () => {
+              if (fireA === fn) fireA = null;
+              if (fireB === fn) fireB = null;
+            },
+          };
+        },
+        refresh: async () => {
+          if (gateRefresh) {
+            const hold = new Promise<void>((resolve) => {
+              releaseRefresh = resolve;
+            });
+            resolveEntered?.();
+            await hold;
+          }
+          return {
+            ok: true,
+            durationMs: 1,
+            snapshot: {
+              capturedAtMs: Date.now(),
+              orcaReady: true,
+              capabilities: [],
+              ignoredShellCount: 0,
+              ambiguousCount: 0,
+              issues: [],
+              sessions: [
+                session({
+                  logicalSessionId: "wt:s1",
+                  worktreeId: "wt",
+                  paneKey: "s1",
+                  runtimeHandle: "h-race" as RuntimeTerminalHandle,
+                }),
+              ],
+            },
+          };
+        },
+        runMutation: async (args) => {
+          mutations.push({ args: [...args] });
+        },
+      });
+      await runtime.whenReady();
+      await runtime.refresh();
+      await runtime.selectSession("wt:s1");
+
+      runtime.beginInterruptHold("key-a");
+      assert.ok(fireA);
+
+      // Hang A's threshold inside refresh so B can start mid-continuation.
+      // (Shared refresh coalescing means B cannot refresh until A releases.)
+      gateRefresh = true;
+      const gateEntered = new Promise<void>((resolve) => {
+        resolveEntered = resolve;
+      });
+      const aDone = Promise.resolve((fireA as () => void | Promise<void>)());
+      await gateEntered;
+
+      // Rapid re-press while A is still continuing past paint/refresh.
+      runtime.beginInterruptHold("key-b");
+      assert.ok(fireB, "gesture B must keep its timer");
+
+      // Let A finish; token-scoped clear must not wipe B.
+      gateRefresh = false;
+      releaseRefresh?.();
+      await aDone;
+      assert.equal(
+        mutations.filter((m) => m.args[1] === "close").length,
+        1,
+        "A threshold still closes exactly once",
+      );
+
+      // B short-release must still interrupt after A's continuation.
+      await runtime.endInterruptHold("key-b");
+      assert.equal(
+        mutations.some(
+          (m) =>
+            m.args[0] === "terminal" &&
+            m.args[1] === "send" &&
+            m.args.includes("--interrupt") &&
+            m.args.includes("h-race"),
+        ),
+        true,
+        "B short-release must send interrupt",
+      );
+      assert.equal(mutations.filter((m) => m.args.includes("--interrupt")).length, 1);
+      assert.equal(mutations.filter((m) => m.args[1] === "close").length, 1);
+
+      runtime.stop();
+    } finally {
+      await rm(tmp, { recursive: true, force: true });
+    }
+  });
+
   it("willDisappear cancels hold; release targets key-down logical id after rejoin", async () => {
     const tmp = await mkdtemp(path.join(os.tmpdir(), "orca-deck-p3w-"));
     try {

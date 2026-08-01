@@ -714,20 +714,28 @@ export class DashboardRuntime {
     }
     const logicalId = g.logicalSessionId;
     const initiating = g.targetId;
-    this.holdProgressRatio = 1;
+    // Progress paint for this gesture only while it is still current.
+    if (this.holdGesture?.token === token) {
+      this.holdProgressRatio = 1;
+      this.holdProgressTargetId = initiating;
+    }
     await this.paintControl("interrupt-close");
 
     await this.refresh();
+    // A newer beginInterruptHold may have replaced the gesture during await —
+    // never clobber gesture B or its timer/progress.
+    if (this.holdGesture?.token === token) {
+      this.holdGesture = null;
+      this.holdProgressRatio = 0;
+      this.holdProgressTargetId = null;
+    }
+
     const session = this.findLiveSession(logicalId);
     const gate = checkMutationPreconditions({
       session,
       kind: "close",
       orcaReady: this.snapshot.orcaReady,
     });
-    // Clear gesture before mutation so a racing key-up cannot also interrupt.
-    this.holdGesture = null;
-    this.holdProgressRatio = 0;
-    this.holdProgressTargetId = null;
 
     if (!gate.ok || !session?.runtimeHandle) {
       this.deps.logger.warn(
