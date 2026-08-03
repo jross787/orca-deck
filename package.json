@@ -1,0 +1,39 @@
+{
+  "name": "orca-agent-deck",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Orca Agent Deck \u2014 Stream Deck XL plugin (Phase 5 usage/model + PI polish)",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "npm run build:overlay && rollup -c",
+    "watch": "rollup -c -w --watch.onEnd=\"streamdeck restart dev.onorca.agent-deck\"",
+    "capture:fixtures": "tsx scripts/capture-redacted-fixtures.ts",
+    "inspect:capabilities": "tsx scripts/inspect-capabilities.ts",
+    "bench:poll": "tsx scripts/poll-benchmark.ts",
+    "test:contracts": "tsx --test tests/contracts/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "validate:plugin": "streamdeck validate dev.onorca.agent-deck.sdPlugin --no-update-check",
+    "build:overlay": "swift build -c release --package-path overlay && mkdir -p dev.onorca.agent-deck.sdPlugin/bin && cp -f overlay/.build/release/orca-draft-overlay dev.onorca.agent-deck.sdPlugin/bin/orca-draft-overlay",
+    "test:overlay": "swift test --package-path overlay"
+  },
+  "dependencies": {
+    "@elgato/streamdeck": "2.1.0",
+    "@elgato/utils": "0.4.5"
+  },
+  "devDependencies": {
+    "@elgato/cli": "1.7.4",
+    "@elgato/schemas": "0.4.15",
+    "@rollup/plugin-commonjs": "^29.0.2",
+    "@rollup/plugin-node-resolve": "^15.2.2",
+    "@rollup/plugin-terser": "^1.0.0",
+    "@rollup/plugin-typescript": "^12.1.0",
+    "@types/node": "^22.13.10",
+    "rollup": "^4.0.2",
+    "tslib": "^2.6.2",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}

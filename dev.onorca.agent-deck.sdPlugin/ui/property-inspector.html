@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Orca Agent Deck</title>
+    <script src="sdpi-components.js"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0b0d10;
+        --panel: #12151a;
+        --ink: #f2f4f7;
+        --muted: #9aa3af;
+        --line: #2a313c;
+        --ready: #3dd68c;
+        --unavailable: #f5a524;
+        --incompatible: #c084fc;
+        --error: #f04438;
+        --accent: #5b8cff;
+        --working: #3b82f6;
+        --waiting: #f5a524;
+        --done: #22c55e;
+        --stuck: #a855f7;
+        --idle: #6b7280;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 12px/1.35 "SF Mono", "Menlo", "Consolas", ui-monospace, monospace;
+      }
+
+      .shell { padding: 10px 12px 14px; display: grid; gap: 10px; }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 10px;
+      }
+      .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .label {
+        color: var(--muted);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        font-size: 10px;
+      }
+      .title { font-size: 13px; font-weight: 600; }
+      .divider { height: 1px; background: var(--line); margin: 8px 0; }
+      .muted { color: var(--muted); }
+      .field { display: grid; gap: 4px; margin: 6px 0; }
+      .field input, .field textarea, .field select {
+        width: 100%;
+        background: var(--bg);
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 6px 8px;
+        font: inherit;
+      }
+      .field textarea { min-height: 48px; resize: vertical; }
+      .actions { display: flex; flex-wrap: wrap; gap: 6px; }
+      button {
+        background: #1a1f27;
+        color: var(--ink);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 6px 10px;
+        font: inherit;
+        cursor: pointer;
+      }
+      button.primary { background: color-mix(in srgb, var(--accent) 35%, #1a1f27); border-color: var(--accent); }
+      .status-line { min-height: 1.2em; margin-top: 8px; color: var(--muted); }
+      .status-line[data-kind="ok"] { color: var(--ready); }
+      .status-line[data-kind="error"] { color: var(--error); }
+      .health { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: center; }
+      .sonar {
+        --ring: var(--muted);
+        width: 34px; height: 34px; border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--ring) 55%, transparent);
+        display: grid; place-items: center; position: relative;
+      }
+      .sonar-core { width: 12px; height: 12px; border-radius: 999px; background: var(--ring); }
+      .sonar[data-state="ready"] { --ring: var(--ready); }
+      .sonar[data-state="unavailable"] { --ring: var(--unavailable); }
+      .sonar[data-state="incompatible"] { --ring: var(--incompatible); }
+      .sonar[data-state="error"] { --ring: var(--error); }
+      .state { font-weight: 700; letter-spacing: 0.04em; }
+      .checks { display: grid; gap: 2px; margin-top: 8px; }
+      .check { display: flex; justify-content: space-between; gap: 8px; }
+      .palette {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .swatch {
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 8px 4px;
+        text-align: center;
+        font-size: 9px;
+        letter-spacing: 0.04em;
+      }
+      .preset-grid { display: grid; gap: 8px; }
+      .provider-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
+      .provider-tabs button[aria-selected="true"] {
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      #diagOut {
+        width: 100%;
+        min-height: 96px;
+        max-height: 180px;
+        background: var(--bg);
+        color: var(--muted);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 6px 8px;
+        font: 10px/1.35 ui-monospace, monospace;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <section class="panel">
+        <div class="row">
+          <div class="title">Orca Agent Deck</div>
+          <div class="label">Health</div>
+        </div>
+        <div class="divider"></div>
+        <div class="health">
+          <div id="sonar" class="sonar" data-state="unavailable" aria-hidden="true">
+            <div class="sonar-core"></div>
+          </div>
+          <div class="stack">
+            <div id="healthState" class="state" data-state="unavailable">UNAVAILABLE</div>
+            <div id="healthDetail" class="muted">Waiting for plugin snapshot.</div>
+          </div>
+        </div>
+        <div id="healthChecks" class="checks muted"></div>
+      </section>
+
+      <section class="panel">
+        <div class="row">
+          <div class="title">Config</div>
+          <div class="label">External JSON authority</div>
+        </div>
+        <div class="divider"></div>
+        <div class="muted" id="configPath">~/Library/Application Support/Orca Agent Deck/config.json</div>
+
+        <label class="field">
+          <span class="label">Orca executable</span>
+          <input id="orcaExecutable" type="text" spellcheck="false" autocomplete="off" placeholder="orca" />
+        </label>
+        <label class="field">
+          <span class="label">CLI timeout (ms)</span>
+          <input id="cliTimeoutMs" type="number" min="1000" max="60000" step="500" />
+        </label>
+        <label class="field">
+          <span class="label">Hold-to-close (ms)</span>
+          <input id="holdToCloseMs" type="number" min="500" max="10000" step="100" />
+        </label>
+        <label class="field">
+          <span class="label">Usage stale after (ms)</span>
+          <input id="usageStaleAfterMs" type="number" min="1000" max="300000" step="500" />
+        </label>
+        <label class="field">
+          <span class="label">Palette enabled</span>
+          <select id="paletteEnabled">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </label>
+        <label class="field">
+          <span class="label">Sound enabled</span>
+          <select id="soundEnabled">
+            <option value="true">true</option>
+            <option value="false">false</option>
+          </select>
+        </label>
+
+        <div class="divider"></div>
+        <div class="actions">
+          <button id="reloadBtn" type="button">Reload config</button>
+          <button id="saveBtn" class="primary" type="button">Save config</button>
+          <button id="refreshHealthBtn" type="button">Refresh health</button>
+        </div>
+        <div id="statusLine" class="status-line" role="status"></div>
+      </section>
+
+      <section class="panel">
+        <div class="row">
+          <div class="title">Presets</div>
+          <div class="label">Four per provider</div>
+        </div>
+        <div class="divider"></div>
+        <div class="provider-tabs" role="tablist">
+          <button type="button" data-provider="omp" aria-selected="true">OMP</button>
+          <button type="button" data-provider="claude" aria-selected="false">Claude</button>
+          <button type="button" data-provider="codex" aria-selected="false">Codex</button>
+          <button type="button" data-provider="unknown" aria-selected="false">Unknown</button>
+        </div>
+        <div class="preset-grid">
+          <label class="field"><span class="label">Preset 1</span><textarea id="preset0" rows="2"></textarea></label>
+          <label class="field"><span class="label">Preset 2</span><textarea id="preset1" rows="2"></textarea></label>
+          <label class="field"><span class="label">Preset 3</span><textarea id="preset2" rows="2"></textarea></label>
+          <label class="field"><span class="label">Preset 4</span><textarea id="preset3" rows="2"></textarea></label>
+        </div>
+        <div class="actions">
+          <button id="savePresetsBtn" class="primary" type="button">Save presets</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="row">
+          <div class="title">Palette</div>
+          <div class="label">Render colors</div>
+        </div>
+        <div class="divider"></div>
+        <div id="palettePreview" class="palette" aria-label="Session palette preview"></div>
+      </section>
+
+      <section class="panel">
+        <div class="row">
+          <div class="title">Sound</div>
+          <div class="label">Local only</div>
+        </div>
+        <div class="divider"></div>
+        <div class="muted">Plays bundled urgent.wav via afplay. Never calls Orca.</div>
+        <div class="actions" style="margin-top:8px">
+          <button id="soundTestBtn" type="button">Test sound</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="row">
+          <div class="title">Diagnostics</div>
+          <div class="label">Redacted export</div>
+        </div>
+        <div class="divider"></div>
+        <div class="muted">Metadata/health/config provenance only — no prompts, presets, drafts, handles, or paths.</div>
+        <div class="actions" style="margin-top:8px">
+          <button id="diagBtn" type="button">Export diagnostics</button>
+          <button id="diagCopyBtn" type="button">Copy JSON</button>
+        </div>
+        <pre id="diagOut" style="margin-top:8px"></pre>
+      </section>
+    </div>
+
+    <script>
+      const { streamDeckClient } = SDPIComponents;
+
+      /** Actual SESSION_PALETTE tokens from plugin/src/rendering/session-svg.ts */
+      const RENDER_PALETTE = {
+        working: "#3b82f6",
+        waiting: "#f5a524",
+        done: "#22c55e",
+        error: "#f04438",
+        stuck: "#a855f7",
+        idle: "#6b7280",
+        identityLost: "#3f3f46",
+        closed: "#4b5563",
+      };
+
+      const els = {
+        sonar: document.getElementById("sonar"),
+        healthState: document.getElementById("healthState"),
+        healthDetail: document.getElementById("healthDetail"),
+        healthChecks: document.getElementById("healthChecks"),
+        configPath: document.getElementById("configPath"),
+        orcaExecutable: document.getElementById("orcaExecutable"),
+        cliTimeoutMs: document.getElementById("cliTimeoutMs"),
+        holdToCloseMs: document.getElementById("holdToCloseMs"),
+        usageStaleAfterMs: document.getElementById("usageStaleAfterMs"),
+        paletteEnabled: document.getElementById("paletteEnabled"),
+        soundEnabled: document.getElementById("soundEnabled"),
+        reloadBtn: document.getElementById("reloadBtn"),
+        saveBtn: document.getElementById("saveBtn"),
+        refreshHealthBtn: document.getElementById("refreshHealthBtn"),
+        statusLine: document.getElementById("statusLine"),
+        preset0: document.getElementById("preset0"),
+        preset1: document.getElementById("preset1"),
+        preset2: document.getElementById("preset2"),
+        preset3: document.getElementById("preset3"),
+        savePresetsBtn: document.getElementById("savePresetsBtn"),
+        palettePreview: document.getElementById("palettePreview"),
+        soundTestBtn: document.getElementById("soundTestBtn"),
+        diagBtn: document.getElementById("diagBtn"),
+        diagCopyBtn: document.getElementById("diagCopyBtn"),
+        diagOut: document.getElementById("diagOut"),
+      };
+
+      /** @type {Record<string, { kind: string }>} */
+      const pending = Object.create(null);
+      /** @type {any} */
+      let lastConfig = null;
+      let activeProvider = "omp";
+      let lastDiagJson = "";
+
+      function requestId() {
+        return `pi_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+      }
+
+      function setStatus(message, kind) {
+        els.statusLine.textContent = message || "";
+        if (kind) els.statusLine.dataset.kind = kind;
+        else delete els.statusLine.dataset.kind;
+      }
+
+      function send(message) {
+        const id = message.requestId || requestId();
+        const payload = { ...message, requestId: id };
+        pending[id] = { kind: payload.type };
+        streamDeckClient.send("sendToPlugin", payload);
+        return id;
+      }
+
+      function renderPalette() {
+        els.palettePreview.innerHTML = Object.entries(RENDER_PALETTE)
+          .map(
+            ([name, color]) =>
+              `<div class="swatch" style="background:${color}22;border-color:${color};color:${color}">${name}</div>`,
+          )
+          .join("");
+      }
+
+      function readPresetsFromUi() {
+        return [
+          els.preset0.value,
+          els.preset1.value,
+          els.preset2.value,
+          els.preset3.value,
+        ];
+      }
+
+      function writePresetsToUi(set) {
+        const arr = Array.isArray(set) ? set : ["", "", "", ""];
+        els.preset0.value = arr[0] ?? "";
+        els.preset1.value = arr[1] ?? "";
+        els.preset2.value = arr[2] ?? "";
+        els.preset3.value = arr[3] ?? "";
+      }
+
+      function applyConfig(config, path) {
+        lastConfig = config || {};
+        if (path) els.configPath.textContent = path;
+        els.orcaExecutable.value = config.orcaExecutable ?? "";
+        els.cliTimeoutMs.value = String(config.cliTimeoutMs ?? 8000);
+        els.holdToCloseMs.value = String(config.holdToCloseMs ?? 1500);
+        els.usageStaleAfterMs.value = String(config.usageStaleAfterMs ?? 10000);
+        els.paletteEnabled.value = String(config.paletteEnabled !== false);
+        els.soundEnabled.value = String(config.soundEnabled !== false);
+        const presets = config.presets || {};
+        writePresetsToUi(presets[activeProvider] || ["", "", "", ""]);
+      }
+
+      function applyHealth(health) {
+        const state = health?.state || "unavailable";
+        els.sonar.dataset.state = state;
+        els.healthState.dataset.state = state;
+        els.healthState.textContent = String(state).toUpperCase();
+        els.healthDetail.textContent = health?.detail || "No health detail.";
+        const checks = Array.isArray(health?.checks) ? health.checks : [];
+        els.healthChecks.innerHTML = checks
+          .map((c) => {
+            const label = c.label || c.id || "check";
+            const value = c.ok === true ? "ok" : c.ok === false ? "fail" : "n/a";
+            return `<div class="check"><span>${label}</span><span>${value}</span></div>`;
+          })
+          .join("");
+      }
+
+      streamDeckClient.sendToPropertyInspector.subscribe(({ payload }) => {
+        if (!payload || typeof payload !== "object") return;
+        const id = payload.requestId;
+        if (id && pending[id]) delete pending[id];
+        else if (id && Object.keys(pending).length) return;
+
+        switch (payload.type) {
+          case "config.snapshot":
+            applyConfig(payload.config || {}, payload.path);
+            setStatus("Loaded config snapshot.", "ok");
+            break;
+          case "config.saved":
+            applyConfig(payload.config || {}, payload.path);
+            setStatus("Saved config.", "ok");
+            break;
+          case "health.snapshot":
+            applyHealth(payload.health || {});
+            setStatus("Health refreshed.", "ok");
+            break;
+          case "sound.tested":
+            setStatus(
+              payload.played ? "Sound played (local)." : payload.detail || "Sound not played.",
+              payload.played ? "ok" : "error",
+            );
+            break;
+          case "diagnostics.snapshot":
+            lastDiagJson = JSON.stringify(payload.diagnostics || {}, null, 2);
+            els.diagOut.textContent = lastDiagJson;
+            setStatus("Diagnostics exported (redacted).", "ok");
+            break;
+          case "error":
+            setStatus(payload.message || payload.code || "Request failed.", "error");
+            break;
+          default:
+            break;
+        }
+      });
+
+      document.querySelectorAll(".provider-tabs button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          if (lastConfig?.presets && activeProvider) {
+            lastConfig.presets[activeProvider] = readPresetsFromUi();
+          }
+          activeProvider = btn.getAttribute("data-provider") || "omp";
+          document.querySelectorAll(".provider-tabs button").forEach((b) => {
+            b.setAttribute("aria-selected", b === btn ? "true" : "false");
+          });
+          writePresetsToUi(lastConfig?.presets?.[activeProvider] || ["", "", "", ""]);
+        });
+      });
+
+      els.reloadBtn.addEventListener("click", () => {
+        setStatus("Loading config…");
+        send({ type: "config.get" });
+      });
+
+      els.saveBtn.addEventListener("click", () => {
+        const cliTimeoutMs = Number(els.cliTimeoutMs.value);
+        const holdToCloseMs = Number(els.holdToCloseMs.value);
+        const usageStaleAfterMs = Number(els.usageStaleAfterMs.value);
+        const executable = els.orcaExecutable.value.trim();
+        setStatus("Saving config…");
+        send({
+          type: "config.patch",
+          patch: {
+            orcaExecutable: executable.length > 0 ? executable : null,
+            cliTimeoutMs,
+            holdToCloseMs,
+            usageStaleAfterMs,
+            paletteEnabled: els.paletteEnabled.value === "true",
+            soundEnabled: els.soundEnabled.value === "true",
+          },
+        });
+      });
+
+      els.savePresetsBtn.addEventListener("click", () => {
+        if (!lastConfig) {
+          setStatus("Load config first.", "error");
+          return;
+        }
+        const presets = { ...(lastConfig.presets || {}) };
+        presets[activeProvider] = readPresetsFromUi();
+        setStatus("Saving presets…");
+        send({ type: "config.patch", patch: { presets } });
+      });
+
+      els.refreshHealthBtn.addEventListener("click", () => {
+        setStatus("Refreshing health…");
+        send({ type: "health.refresh" });
+      });
+
+      els.soundTestBtn.addEventListener("click", () => {
+        setStatus("Testing sound…");
+        send({ type: "sound.test" });
+      });
+
+      els.diagBtn.addEventListener("click", () => {
+        setStatus("Exporting diagnostics…");
+        send({ type: "diagnostics.export" });
+      });
+
+      els.diagCopyBtn.addEventListener("click", async () => {
+        if (!lastDiagJson) {
+          setStatus("Export diagnostics first.", "error");
+          return;
+        }
+        try {
+          await navigator.clipboard.writeText(lastDiagJson);
+          setStatus("Diagnostics copied.", "ok");
+        } catch {
+          setStatus("Clipboard write failed.", "error");
+        }
+      });
+
+      renderPalette();
+      send({ type: "config.get" });
+      send({ type: "health.refresh" });
+    </script>
+  </body>
+</html>

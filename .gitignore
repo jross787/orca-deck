@@ -1,0 +1,13 @@
+.worktrees/
+node_modules/
+dist/
+dev.onorca.agent-deck.sdPlugin/bin/
+dev.onorca.agent-deck.sdPlugin/logs/
+*.sdPlugin/bin/
+*.sdPlugin/logs/
+*.log
+.DS_Store
+coverage/
+tmp/
+.benchmark-out/
+overlay/.build/

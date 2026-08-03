@@ -1,0 +1,56 @@
+{
+  "schemaVersion": "orca-cli-json/1.4.159",
+  "description": "Machine-readable inventory of Phase 0 Orca fixtures. provenance is observed|synthetic per file meta.provenance.",
+  "fixtures": [
+    {
+      "path": "synthetic/local-omp-states.json",
+      "provenance": "synthetic",
+      "scenario": "local-omp-states",
+      "covers": ["omp:working", "omp:done", "omp:waiting", "omp:error", "local"]
+    },
+    {
+      "path": "synthetic/local-claude-codex-states.json",
+      "provenance": "synthetic",
+      "scenario": "local-claude-codex-states",
+      "covers": [
+        "claude:waiting",
+        "claude:done",
+        "claude:error",
+        "codex:waiting",
+        "codex:done",
+        "codex:error",
+        "local"
+      ]
+    },
+    {
+      "path": "synthetic/ssh-multi-agent.json",
+      "provenance": "synthetic",
+      "scenario": "ssh-multi-agent",
+      "covers": ["ssh", "multi-agent", "ignored-shell"]
+    },
+    {
+      "path": "synthetic/disconnect-stale-ambiguous.json",
+      "provenance": "synthetic",
+      "scenario": "disconnect-stale-ambiguous",
+      "covers": ["disconnected", "stale-missing-terminal", "ambiguous-join"]
+    },
+    {
+      "path": "synthetic/unknown-fields-states.json",
+      "provenance": "synthetic",
+      "scenario": "unknown-fields-states",
+      "covers": ["unknown-state", "unknown-fields", "forward-compat"]
+    },
+    {
+      "path": "observed/live-redacted.json",
+      "provenance": "observed",
+      "scenario": "live-redacted",
+      "covers": [
+        "observed-capture",
+        "identity-placeholders",
+        "worktree-terminal-join"
+      ]
+    }
+  ],
+  "observedDir": "observed/",
+  "observedNote": "Live redacted captures written only by scripts/capture-redacted-fixtures.ts after assertSafeFixtureJson. Observed provenance forces repo/displayName/branch placeholders and wt_<n> worktreeIds."
+}

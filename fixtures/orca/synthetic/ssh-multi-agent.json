@@ -1,0 +1,143 @@
+{
+  "meta": {
+    "schemaVersion": "orca-cli-json/1.4.159",
+    "provenance": "synthetic",
+    "scenario": "ssh-multi-agent",
+    "capturedAt": "2026-08-01T00:00:00.000Z",
+    "orcaAppVersion": "1.4.159",
+    "notes": [
+      "Synthetic SSH worktree with multiple agents in one worktree plus a plain shell to ignore.",
+      "Not observed from a live capture on this machine."
+    ],
+    "redaction": {
+      "strippedFields": [
+        "prompt",
+        "lastAssistantMessage",
+        "toolInput",
+        "preview",
+        "title",
+        "path",
+        "worktreePath",
+        "handle",
+        "ptyId",
+        "comment"
+      ],
+      "pathPolicy": "absolute paths replaced with pathPlaceholder derived from worktreeId",
+      "handlePolicy": "live runtime handles replaced with handlePlaceholder; never restore as command targets from fixtures"
+    }
+  },
+  "status": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "app": { "running": true, "desktopWindowStatus": "visible" },
+      "runtime": {
+        "state": "ready",
+        "reachable": true,
+        "runtimeId": "rt_synth_ssh",
+        "appVersion": "1.4.159",
+        "capabilities": ["terminal.query-reply-input.v1", "remote.ssh.v1"]
+      },
+      "graph": { "state": "ready" }
+    }
+  },
+  "worktreePs": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "totalCount": 1,
+      "truncated": false,
+      "worktrees": [
+        {
+          "workspaceKind": "git",
+          "worktreeId": "remote-app::dev",
+          "repoId": "repo_remote_app",
+          "hostId": "host_ssh_1",
+          "terminalPlatform": "linux",
+          "repo": "remote-app",
+          "pathPlaceholder": "<redacted-path:remote-app#0>",
+          "branch": "dev",
+          "isMainWorktree": false,
+          "displayName": "ssh-dev",
+          "workspaceStatus": "ready",
+          "isActive": true,
+          "unread": true,
+          "liveTerminalCount": 3,
+          "hasAttachedPty": true,
+          "lastOutputAt": 1754000302000,
+          "status": "active",
+          "agents": [
+            {
+              "paneKey": "tab_r:leaf_1",
+              "parentPaneKey": null,
+              "state": "working",
+              "agentType": "omp",
+              "toolName": "Edit",
+              "interrupted": false,
+              "stateStartedAt": 1754000301000,
+              "updatedAt": 1754000301500,
+              "hasPrompt": false,
+              "hasToolInput": true
+            },
+            {
+              "paneKey": "tab_r:leaf_2",
+              "parentPaneKey": null,
+              "state": "waiting",
+              "agentType": "claude",
+              "toolName": null,
+              "interrupted": false,
+              "stateStartedAt": 1754000302000,
+              "updatedAt": 1754000302500,
+              "hasPrompt": true,
+              "hasToolInput": false
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "terminalList": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "terminals": [
+        {
+          "handlePlaceholder": "<redacted-handle:0>",
+          "incarnationId": "inc_r0",
+          "orphaned": false,
+          "worktreeId": "remote-app::dev",
+          "tabId": "tab_r",
+          "leafId": "leaf_1",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000301500,
+          "hasTitle": true
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:1>",
+          "incarnationId": "inc_r1",
+          "orphaned": false,
+          "worktreeId": "remote-app::dev",
+          "tabId": "tab_r",
+          "leafId": "leaf_2",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000302500,
+          "hasTitle": true
+        },
+        {
+          "handlePlaceholder": "<redacted-handle:2>",
+          "incarnationId": "inc_shell",
+          "orphaned": false,
+          "worktreeId": "remote-app::dev",
+          "tabId": "tab_r",
+          "leafId": "leaf_shell",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000300000,
+          "hasTitle": true
+        }
+      ]
+    }
+  }
+}

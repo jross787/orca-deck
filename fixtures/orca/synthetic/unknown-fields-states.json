@@ -1,0 +1,106 @@
+{
+  "meta": {
+    "schemaVersion": "orca-cli-json/1.4.159",
+    "provenance": "synthetic",
+    "scenario": "unknown-fields-states",
+    "capturedAt": "2026-08-01T00:00:00.000Z",
+    "orcaAppVersion": "1.4.159",
+    "notes": [
+      "Synthetic forward-compat case: unknown agent state maps to unknown/disabled; unknown fields tolerated.",
+      "Decoder unknown-field payloads are constructed in tests/contracts/schema.test.ts (not stored with content-bearing keys).",
+      "Not observed from a live capture on this machine."
+    ],
+    "redaction": {
+      "strippedFields": [
+        "prompt",
+        "lastAssistantMessage",
+        "toolInput",
+        "preview",
+        "title",
+        "path",
+        "worktreePath",
+        "handle",
+        "ptyId",
+        "comment"
+      ],
+      "pathPolicy": "absolute paths replaced with pathPlaceholder derived from worktreeId",
+      "handlePolicy": "live runtime handles replaced with handlePlaceholder; never restore as command targets from fixtures"
+    }
+  },
+  "status": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "app": { "running": true, "desktopWindowStatus": "visible" },
+      "runtime": {
+        "state": "ready",
+        "reachable": true,
+        "runtimeId": "rt_synth_unknown",
+        "appVersion": "1.4.159",
+        "capabilities": ["terminal.query-reply-input.v1", "future.cap.v9"]
+      },
+      "graph": { "state": "ready" }
+    }
+  },
+  "worktreePs": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "totalCount": 1,
+      "truncated": false,
+      "worktrees": [
+        {
+          "workspaceKind": "git",
+          "worktreeId": "future-repo::main",
+          "repoId": "repo_future",
+          "hostId": "local",
+          "terminalPlatform": "mac",
+          "repo": "future-repo",
+          "pathPlaceholder": "<redacted-path:future-repo#0>",
+          "branch": "main",
+          "displayName": "future-main",
+          "isActive": true,
+          "unread": false,
+          "liveTerminalCount": 1,
+          "hasAttachedPty": true,
+          "lastOutputAt": 1754000500000,
+          "status": "active",
+          "agents": [
+            {
+              "paneKey": "tab_f:leaf_1",
+              "parentPaneKey": null,
+              "state": "compiling_widgets",
+              "agentType": "omp",
+              "toolName": "Compile",
+              "interrupted": false,
+              "stateStartedAt": 1754000500000,
+              "updatedAt": 1754000500500,
+              "hasPrompt": false,
+              "hasToolInput": false
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "terminalList": {
+    "ok": true,
+    "id": "<redacted-envelope-id>",
+    "result": {
+      "terminals": [
+        {
+          "handlePlaceholder": "<redacted-handle:0>",
+          "incarnationId": "inc_f0",
+          "orphaned": false,
+          "worktreeId": "future-repo::main",
+          "tabId": "tab_f",
+          "leafId": "leaf_1",
+          "connected": true,
+          "writable": true,
+          "lastOutputAt": 1754000500500,
+          "hasTitle": true
+        }
+      ]
+    }
+  }
+}

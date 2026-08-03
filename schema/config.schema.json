@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://onorca.dev/schemas/orca-agent-deck/config.schema.json",
+  "title": "Orca Agent Deck Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "polling",
+    "cliTimeoutMs",
+    "stuckThresholdMinutes",
+    "paletteEnabled",
+    "soundEnabled",
+    "holdToCloseMs",
+    "usageStaleAfterMs",
+    "presets"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "orcaExecutable": {
+      "type": ["string", "null"],
+      "minLength": 1
+    },
+    "polling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workingMs", "idleMs", "unavailableMs", "backoffCapMs"],
+      "properties": {
+        "workingMs": { "type": "integer", "minimum": 500, "maximum": 60000 },
+        "idleMs": { "type": "integer", "minimum": 500, "maximum": 120000 },
+        "unavailableMs": { "type": "integer", "minimum": 1000, "maximum": 120000 },
+        "backoffCapMs": { "type": "integer", "minimum": 1000, "maximum": 300000 }
+      }
+    },
+    "cliTimeoutMs": { "type": "integer", "minimum": 1000, "maximum": 60000 },
+    "stuckThresholdMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
+    "paletteEnabled": { "type": "boolean" },
+    "soundEnabled": { "type": "boolean" },
+    "holdToCloseMs": { "type": "integer", "minimum": 500, "maximum": 10000 },
+    "usageStaleAfterMs": { "type": "integer", "minimum": 1000, "maximum": 300000 },
+    "presets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["omp", "claude", "codex", "unknown"],
+      "properties": {
+        "omp": { "$ref": "#/$defs/presetSet" },
+        "claude": { "$ref": "#/$defs/presetSet" },
+        "codex": { "$ref": "#/$defs/presetSet" },
+        "unknown": { "$ref": "#/$defs/presetSet" }
+      }
+    },
+    "superwhisper": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shortcut": { "type": "string" },
+        "mode": { "type": "string" }
+      }
+    },
+    "remoteHostFilters": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "$defs": {
+    "presetSet": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": { "type": "string" }
+    }
+  }
+}
