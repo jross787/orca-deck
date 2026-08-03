@@ -56,8 +56,8 @@ export function renderUsageSvg(face: UsageFaceView, options: UsageSvgOptions = {
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144">
-  <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
-  <rect x="6" y="6" width="132" height="132" rx="8" fill="${palette.panel}" stroke="${color}" stroke-width="${borderW}"/>
+  <rect width="144" height="144" fill="${palette.bg}"/>
+  <rect x="6" y="6" width="132" height="132" rx="18" fill="${palette.panel}" stroke="${color}" stroke-width="${borderW}"/>
   <text x="72" y="31" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace,Menlo,monospace" font-size="20" font-weight="700" letter-spacing="0.5">${title}</text>
   <text x="72" y="66" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace,Menlo,monospace" font-size="24" font-weight="700">${primary}</text>
   <text x="72" y="96" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace,Menlo,monospace" font-size="20" font-weight="600">${secondary}</text>

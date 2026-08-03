@@ -98,8 +98,8 @@ export function renderHealthSvg(
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="Orca health ${escapeXml(label)}">
-  <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
-  <rect x="8" y="8" width="128" height="128" rx="8" fill="${palette.panel}" stroke="${palette.line}" stroke-width="1"/>
+  <rect width="144" height="144" fill="${palette.bg}"/>
+  <rect x="8" y="8" width="128" height="128" rx="18" fill="${palette.panel}" stroke="${palette.line}" stroke-width="1"/>
   <text x="72" y="31" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700" letter-spacing="1.5">ORCA</text>
   <line x1="16" y1="39" x2="128" y2="39" stroke="${palette.line}" stroke-width="1"/>
   ${sweep}

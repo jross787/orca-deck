@@ -31,11 +31,11 @@ public struct OverlayView: View {
     private var header: some View {
         HStack {
             Text("ORCA DRAFT")
-                .font(.system(.headline, design: .monospaced))
+                .font(.system(size: 20, weight: .bold, design: .monospaced))
                 .foregroundStyle(Color(red: 0.95, green: 0.96, blue: 0.97))
             Spacer()
             Text(controller.uiState.rawValue.uppercased())
-                .font(.system(.caption, design: .monospaced))
+                .font(.system(size: 15, weight: .semibold, design: .monospaced))
                 .foregroundStyle(stateColor)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
@@ -51,7 +51,7 @@ public struct OverlayView: View {
             labelRow("host", controller.context.hostLabel)
             labelRow("agent", controller.context.agentLabel)
         }
-        .font(.system(.caption, design: .monospaced))
+        .font(.system(size: 15, weight: .medium, design: .monospaced))
         .foregroundStyle(Color(red: 0.60, green: 0.64, blue: 0.69))
     }
 
@@ -71,7 +71,7 @@ public struct OverlayView: View {
             get: { controller.editorText },
             set: { controller.onEditorChange($0) }
         ))
-        .font(.system(.body, design: .monospaced))
+        .font(.system(size: 17, design: .monospaced))
         .scrollContentBackground(.hidden)
         .padding(8)
         .frame(minHeight: 140)
@@ -88,7 +88,7 @@ public struct OverlayView: View {
     private var nameField: some View {
         HStack(spacing: 8) {
             Text("NAME")
-                .font(.system(.caption, design: .monospaced))
+                .font(.system(size: 15, weight: .semibold, design: .monospaced))
                 .foregroundStyle(Color(red: 0.60, green: 0.64, blue: 0.69))
                 .frame(width: 48, alignment: .leading)
             TextField("worktree-name", text: Binding(
@@ -96,7 +96,7 @@ public struct OverlayView: View {
                 set: { controller.onNameChange($0) }
             ))
             .textFieldStyle(.plain)
-            .font(.system(.body, design: .monospaced))
+            .font(.system(size: 17, design: .monospaced))
             .padding(8)
             .background(Color(red: 0.07, green: 0.08, blue: 0.10))
             .clipShape(RoundedRectangle(cornerRadius: 6))
@@ -106,7 +106,7 @@ public struct OverlayView: View {
 
     private var statusStrip: some View {
         Text(controller.statusMessage.isEmpty ? " " : controller.statusMessage)
-            .font(.system(.caption, design: .monospaced))
+            .font(.system(size: 15, weight: .medium, design: .monospaced))
             .foregroundStyle(controller.statusIsError
                 ? Color(red: 0.94, green: 0.27, blue: 0.22)
                 : Color(red: 0.60, green: 0.64, blue: 0.69))
@@ -156,7 +156,7 @@ public struct OverlayView: View {
     ) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(.caption, design: .monospaced).weight(.semibold))
+                .font(.system(size: 17, weight: .semibold, design: .monospaced))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
                 .frame(maxWidth: .infinity)

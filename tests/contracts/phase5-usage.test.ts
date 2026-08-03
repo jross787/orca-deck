@@ -377,6 +377,7 @@ describe("usage SVG faces", () => {
       fontSizes.every((size) => size >= 20),
       `Usage key contains type smaller than 20px: ${fontSizes.join(", ")}`,
     );
+    assert.match(svg, /rx="18"/);
   });
 });
 

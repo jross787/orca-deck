@@ -747,6 +747,7 @@ describe("card and control SVG labels colors debounce", () => {
         fontSizes.every((size) => size >= 20),
         `Session key contains type smaller than 20px: ${fontSizes.join(", ")}`,
       );
+      assert.match(svg, /rx="18"/);
     }
     assert.equal(formatElapsed(65_000), "1m05s");
     const csvg = renderControlSvg("next", {
@@ -779,6 +780,7 @@ describe("card and control SVG labels colors debounce", () => {
         fontSizes.every((size) => size >= 20),
         `Control key contains type smaller than 20px: ${fontSizes.join(", ")}`,
       );
+      assert.match(svg, /rx="18"/);
     }
     const deb = new ImageWriteDebouncer();
     const url = sessionSvgDataUrl(

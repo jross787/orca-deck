@@ -126,29 +126,6 @@ export function stateLabel(state: SessionCardState): string {
   }
 }
 
-/** Compact glyph path per state (icon, not color-only). */
-function stateIcon(state: SessionCardState, color: string): string {
-  switch (state) {
-    case "working":
-      return `<circle cx="24" cy="24" r="8" fill="none" stroke="${color}" stroke-width="3"/><path d="M24 16 v8 h6" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round"/>`;
-    case "waiting":
-      return `<path d="M24 14 l10 18 h-20 z" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round"/><circle cx="24" cy="28" r="1.6" fill="${color}"/>`;
-    case "done":
-      return `<circle cx="24" cy="24" r="10" fill="none" stroke="${color}" stroke-width="3"/><path d="M18 24 l4 4 l8-9" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
-    case "error":
-      return `<circle cx="24" cy="24" r="10" fill="none" stroke="${color}" stroke-width="3"/><path d="M24 18 v7" stroke="${color}" stroke-width="3" stroke-linecap="round"/><circle cx="24" cy="30" r="1.6" fill="${color}"/>`;
-    case "stuck":
-      return `<rect x="14" y="14" width="20" height="20" rx="3" fill="none" stroke="${color}" stroke-width="3"/><path d="M20 24 h8 M24 20 v8" stroke="${color}" stroke-width="3" stroke-linecap="round"/>`;
-    case "identity_lost":
-      return `<path d="M16 20 h16 M16 28 h16" stroke="${color}" stroke-width="3" stroke-linecap="round"/><path d="M20 16 l-4 8 4 8 M28 16 l4 8 -4 8" fill="none" stroke="${color}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`;
-    case "closed":
-      return `<rect x="15" y="16" width="18" height="16" rx="2" fill="none" stroke="${color}" stroke-width="3"/><path d="M15 22 h18" stroke="${color}" stroke-width="3"/>`;
-    case "disconnected":
-      return `<path d="M16 24 h6 M26 24 h6" stroke="${color}" stroke-width="3" stroke-linecap="round"/><circle cx="24" cy="24" r="3" fill="${color}"/>`;
-    default:
-      return `<circle cx="24" cy="24" r="9" fill="none" stroke="${color}" stroke-width="3"/><text x="24" y="28" text-anchor="middle" fill="${color}" font-size="14" font-family="ui-monospace, Menlo, monospace">?</text>`;
-  }
-}
 
 export function formatElapsed(ms: number): string {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -189,8 +166,8 @@ export function renderSessionSvg(card: CardViewModel, options: SessionSvgOptions
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="${escapeXml(label)} ${escapeXml(repo)}">
-  <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
-  <rect x="6" y="6" width="132" height="132" rx="8" fill="${palette.panel}" stroke="${border}" stroke-width="${borderWidth}"/>
+  <rect width="144" height="144" fill="${palette.bg}"/>
+  <rect x="6" y="6" width="132" height="132" rx="18" fill="${palette.panel}" stroke="${border}" stroke-width="${borderWidth}"/>
   <text x="72" y="30" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700">${escapeXml(repo)}</text>
   <text x="72" y="55" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600">${escapeXml(worktree)}</text>
   ${unreadDot}
@@ -211,8 +188,8 @@ export function renderEmptySlotSvg(slotIndex: number, options: SessionSvgOptions
   const n = String(slotIndex + 1).padStart(2, "0");
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="Empty slot ${n}">
-  <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
-  <rect x="8" y="8" width="128" height="128" rx="8" fill="${palette.panel}" stroke="${palette.line}" stroke-width="1"/>
+  <rect width="144" height="144" fill="${palette.bg}"/>
+  <rect x="8" y="8" width="128" height="128" rx="18" fill="${palette.panel}" stroke="${palette.line}" stroke-width="1"/>
   <text x="72" y="66" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" font-weight="700">SLOT ${n}</text>
   <text x="72" y="98" text-anchor="middle" fill="${palette.line}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" font-weight="700">EMPTY</text>
 </svg>`;
@@ -482,8 +459,8 @@ export function renderControlSvg(
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="${face.title} ${escapeXml(face.detail)}">
-  <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
-  <rect x="6" y="6" width="132" height="132" rx="8" fill="${palette.panel}" stroke="${face.border}" stroke-width="${face.borderWidth}"/>
+  <rect width="144" height="144" fill="${palette.bg}"/>
+  <rect x="6" y="6" width="132" height="132" rx="18" fill="${palette.panel}" stroke="${face.border}" stroke-width="${face.borderWidth}"/>
   <text x="72" y="32" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700" letter-spacing="2">ORCA</text>
   <text x="72" y="72" text-anchor="middle" fill="${face.color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="28" font-weight="700" letter-spacing="0.5">${face.title}</text>
   ${detailSvg}
