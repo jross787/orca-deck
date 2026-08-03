@@ -198,6 +198,43 @@ describe("health refresh single CLI round", () => {
     assert.equal(action.getLastHealth()?.state, "ready");
     action.stopPolling();
   });
+  it("paints the appearing Health key before the global action registry catches up", async () => {
+    const store = new ConfigStore({
+      paths: {
+        supportDir: "/tmp/orca-deck-unused",
+        configPath: "/tmp/orca-deck-unused/config.json",
+        statePath: "/tmp/orca-deck-unused/state.json",
+        logsDir: "/tmp/orca-deck-unused-logs",
+        logPath: "/tmp/orca-deck-unused-logs/plugin.log",
+      },
+      watch: false,
+    });
+    const action = new HealthAction({
+      configStore: store,
+      logger: new RedactedLogger({ sink: () => undefined }),
+      checkHealth: async () => ({
+        state: "ready",
+        detail: "ok",
+        checkedAt: "2026-08-01T00:00:00.000Z",
+        schemaVersion: SCHEMA_VERSION,
+        checks: [],
+      }),
+    });
+    const images: string[] = [];
+
+    await action.onWillAppear({
+      action: {
+        id: "health-1",
+        setImage: async (image: string) => {
+          images.push(image);
+        },
+      },
+    } as unknown as Parameters<HealthAction["onWillAppear"]>[0]);
+
+    assert.equal(images.length, 1);
+    assert.match(decodeURIComponent(images[0] ?? ""), /font-size="24"/);
+    action.stopPolling();
+  });
 });
 
 

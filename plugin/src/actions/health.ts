@@ -46,7 +46,12 @@ export class HealthAction extends SingletonAction<HealthActionSettings> {
     this.deps.logger.info("health_will_appear", undefined, {
       ids: { actionId: ev.action.id },
     });
-    await this.refreshAndPaint(ev.action.id);
+    const health = await this.refreshHealth();
+    const image = healthSvgDataUrl(health);
+    if (this.debouncer.shouldWrite(ev.action.id, image)) {
+      await ev.action.setImage(image, { target: Target.HardwareAndSoftware });
+    }
+    await this.paintAll(health);
     this.ensurePolling();
   }
 
