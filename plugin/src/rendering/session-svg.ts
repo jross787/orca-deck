@@ -176,8 +176,8 @@ export function renderSessionSvg(card: CardViewModel, options: SessionSvgOptions
   const palette = options.palette ?? SESSION_PALETTE;
   const color = stateColor(card.cardState, palette);
   const label = stateLabel(card.cardState);
-  const repo = truncate(card.repo || "repo", 12);
-  const worktree = truncate(card.worktree || "worktree", 13);
+  const repo = truncate(card.repo || "repo", 9);
+  const worktree = truncate(card.worktree || "worktree", 9);
   const badge = agentBadge(String(card.agentType));
   const elapsed = formatElapsed(card.elapsedMs);
   const children = card.ompChildCount > 0 ? `+${card.ompChildCount}` : "";
@@ -186,20 +186,18 @@ export function renderSessionSvg(card: CardViewModel, options: SessionSvgOptions
   const unreadDot = card.unread
     ? `<circle cx="128" cy="18" r="5" fill="${palette.unread}" stroke="${color}" stroke-width="1"/>`
     : "";
-  const icon = stateIcon(card.cardState, color);
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="${escapeXml(label)} ${escapeXml(repo)}">
   <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
   <rect x="6" y="6" width="132" height="132" rx="8" fill="${palette.panel}" stroke="${border}" stroke-width="${borderWidth}"/>
-  <text x="14" y="27" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">${escapeXml(repo)}</text>
-  <text x="14" y="47" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">${escapeXml(worktree)}</text>
+  <text x="72" y="30" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700">${escapeXml(repo)}</text>
+  <text x="72" y="55" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600">${escapeXml(worktree)}</text>
   ${unreadDot}
-  <g transform="translate(12, 55)">${icon}</g>
-  <text x="60" y="75" fill="${color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700" letter-spacing="0.5">${escapeXml(label)}</text>
-  <text x="60" y="96" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">${escapeXml(badge)}${children ? ` · ${escapeXml(children)}` : ""}</text>
-  <text x="14" y="126" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">${escapeXml(elapsed)}</text>
-  <text x="130" y="126" text-anchor="end" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">${escapeXml(card.hostId === "local" ? "" : card.hostId.slice(0, 7))}</text>
+  <line x1="16" y1="65" x2="128" y2="65" stroke="${palette.line}" stroke-width="1"/>
+  <text x="72" y="94" text-anchor="middle" fill="${color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24" font-weight="700" letter-spacing="0.5">${escapeXml(label)}</text>
+  <text x="14" y="126" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700">${escapeXml(badge)}${children ? ` ${escapeXml(children)}` : ""}</text>
+  <text x="130" y="126" text-anchor="end" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700">${escapeXml(elapsed)}</text>
 </svg>`;
 }
 
@@ -215,8 +213,8 @@ export function renderEmptySlotSvg(slotIndex: number, options: SessionSvgOptions
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="Empty slot ${n}">
   <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
   <rect x="8" y="8" width="128" height="128" rx="8" fill="${palette.panel}" stroke="${palette.line}" stroke-width="1"/>
-  <text x="72" y="68" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">SLOT ${n}</text>
-  <text x="72" y="94" text-anchor="middle" fill="${palette.line}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">EMPTY</text>
+  <text x="72" y="66" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" font-weight="700">SLOT ${n}</text>
+  <text x="72" y="98" text-anchor="middle" fill="${palette.line}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" font-weight="700">EMPTY</text>
 </svg>`;
 }
 
@@ -453,6 +451,14 @@ function controlFace(
   };
 }
 
+function controlDetailLines(text: string): readonly [string, string?] {
+  if (text.length <= 11) return [text];
+  const before = text.lastIndexOf(" ", 11);
+  const split = before > 0 ? before : text.indexOf(" ", 11);
+  if (split <= 0) return [truncate(text, 11)];
+  return [truncate(text.slice(0, split), 11), truncate(text.slice(split + 1), 11)];
+}
+
 export function renderControlSvg(
   kind: ControlKind,
   control: ControlFaceInput,
@@ -463,20 +469,24 @@ export function renderControlSvg(
   const progress = options.progress ?? 0;
   const face = controlFace(kind, control, progress);
   const barWidth = face.bar != null ? Math.round(120 * face.bar) : 0;
-  const detail = escapeXml(face.detail);
+  const [detailFirst, detailSecond] = controlDetailLines(face.detail);
+  const detailSvg = detailSecond
+    ? `<text x="72" y="101" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600">${escapeXml(detailFirst)}</text>
+  <text x="72" y="124" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600">${escapeXml(detailSecond)}</text>`
+    : `<text x="72" y="113" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600">${escapeXml(detailFirst)}</text>`;
   const barSvg =
     face.bar != null
-      ? `<rect x="12" y="122" width="120" height="8" rx="3" fill="${palette.line}"/>
-  <rect x="12" y="122" width="${barWidth}" height="8" rx="3" fill="${face.color}"/>`
+      ? `<rect x="12" y="132" width="120" height="5" rx="2" fill="${palette.line}"/>
+  <rect x="12" y="132" width="${barWidth}" height="5" rx="2" fill="${face.color}"/>`
       : "";
 
   return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="${face.title}">
+<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="${face.title} ${escapeXml(face.detail)}">
   <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
   <rect x="6" y="6" width="132" height="132" rx="8" fill="${palette.panel}" stroke="${face.border}" stroke-width="${face.borderWidth}"/>
-  <text x="72" y="40" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700" letter-spacing="2">ORCA</text>
-  <text x="72" y="79" text-anchor="middle" fill="${face.color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" font-weight="700" letter-spacing="1">${face.title}</text>
-  <text x="72" y="107" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">${detail}</text>
+  <text x="72" y="32" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700" letter-spacing="2">ORCA</text>
+  <text x="72" y="72" text-anchor="middle" fill="${face.color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="28" font-weight="700" letter-spacing="0.5">${face.title}</text>
+  ${detailSvg}
   ${barSvg}
 </svg>`;
 }

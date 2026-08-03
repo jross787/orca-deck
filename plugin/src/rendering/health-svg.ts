@@ -86,7 +86,6 @@ export function renderHealthSvg(
   const palette = options.palette ?? HEALTH_PALETTE;
   const color = stateColor(health.state, palette);
   const label = stateLabel(health.state);
-  const version = health.orcaAppVersion ? truncate(health.orcaAppVersion, 12) : "—";
   const runtime = health.runtimeState ? truncate(health.runtimeState, 14) : health.state;
   const reducedMotion = options.reducedMotion === true;
   const sweep =
@@ -101,13 +100,12 @@ export function renderHealthSvg(
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="Orca health ${escapeXml(label)}">
   <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
   <rect x="8" y="8" width="128" height="128" rx="8" fill="${palette.panel}" stroke="${palette.line}" stroke-width="1"/>
-  <text x="16" y="29" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700" letter-spacing="1.2">ORCA</text>
-  <text x="128" y="29" text-anchor="end" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">${escapeXml(version)}</text>
-  <line x1="16" y1="34" x2="128" y2="34" stroke="${palette.line}" stroke-width="1"/>
+  <text x="72" y="31" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700" letter-spacing="1.5">ORCA</text>
+  <line x1="16" y1="39" x2="128" y2="39" stroke="${palette.line}" stroke-width="1"/>
   ${sweep}
   <circle cx="72" cy="52" r="8" fill="${color}"/>
-  <text x="72" y="94" text-anchor="middle" fill="${color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24" font-weight="700" letter-spacing="1.5">${escapeXml(label)}</text>
-  <text x="72" y="122" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">${escapeXml(runtime)}</text>
+  <text x="72" y="98" text-anchor="middle" fill="${color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="28" font-weight="700" letter-spacing="1">${escapeXml(label)}</text>
+  <text x="72" y="126" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700">${escapeXml(runtime)}</text>
 </svg>`;
 }
 

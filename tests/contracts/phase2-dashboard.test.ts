@@ -744,8 +744,8 @@ describe("card and control SVG labels colors debounce", () => {
         Number(match[1]),
       );
       assert.ok(
-        fontSizes.every((size) => size >= 14),
-        `Session key contains type smaller than 14px: ${fontSizes.join(", ")}`,
+        fontSizes.every((size) => size >= 20),
+        `Session key contains type smaller than 20px: ${fontSizes.join(", ")}`,
       );
     }
     assert.equal(formatElapsed(65_000), "1m05s");
@@ -776,8 +776,8 @@ describe("card and control SVG labels colors debounce", () => {
         Number(match[1]),
       );
       assert.ok(
-        fontSizes.every((size) => size >= 14),
-        `Control key contains type smaller than 14px: ${fontSizes.join(", ")}`,
+        fontSizes.every((size) => size >= 20),
+        `Control key contains type smaller than 20px: ${fontSizes.join(", ")}`,
       );
     }
     const deb = new ImageWriteDebouncer();

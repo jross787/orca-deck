@@ -232,7 +232,7 @@ describe("health refresh single CLI round", () => {
     } as unknown as Parameters<HealthAction["onWillAppear"]>[0]);
 
     assert.equal(images.length, 1);
-    assert.match(decodeURIComponent(images[0] ?? ""), /font-size="24"/);
+    assert.match(decodeURIComponent(images[0] ?? ""), /font-size="28"/);
     action.stopPolling();
   });
 });
@@ -307,8 +307,8 @@ describe("SVG output and write debounce", () => {
 
     assert.ok(fontSizes.length > 0);
     assert.ok(
-      fontSizes.every((size) => size >= 14),
-      `Health key contains type smaller than 14px: ${fontSizes.join(", ")}`,
+      fontSizes.every((size) => size >= 20),
+      `Health key contains type smaller than 20px: ${fontSizes.join(", ")}`,
     );
     assert.equal(svg.includes("runtime available"), false);
   });
