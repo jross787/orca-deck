@@ -310,7 +310,7 @@ describe("SVG output and write debounce", () => {
       fontSizes.every((size) => size >= 20),
       `Health key contains type smaller than 20px: ${fontSizes.join(", ")}`,
     );
-    assert.match(svg, /rx="18"/);
+    assert.match(svg, /rx="22"/);
     assert.equal(svg.includes("runtime available"), false);
   });
 

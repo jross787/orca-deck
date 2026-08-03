@@ -140,8 +140,8 @@ export function formatElapsed(ms: number): string {
 export function agentBadge(agentType: string): string {
   const t = agentType.toLowerCase();
   if (t === "omp") return "OMP";
-  if (t === "claude") return "CLAUDE";
-  if (t === "codex") return "CODEX";
+  if (t === "claude") return "CLD";
+  if (t === "codex") return "CDX";
   return truncate(agentType.toUpperCase() || "AGENT", 8);
 }
 
@@ -157,24 +157,29 @@ export function renderSessionSvg(card: CardViewModel, options: SessionSvgOptions
   const worktree = truncate(card.worktree || "worktree", 9);
   const badge = agentBadge(String(card.agentType));
   const elapsed = formatElapsed(card.elapsedMs);
+  const footerElapsed = elapsed.endsWith("s")
+    ? elapsed.slice(0, -1).replace("m", ":")
+    : elapsed;
   const children = card.ompChildCount > 0 ? `+${card.ompChildCount}` : "";
+  const footer = children
+    ? `${badge}${children} ${footerElapsed}`
+    : `${badge} · ${footerElapsed}`;
   const border = card.selected ? palette.selectedBorder : palette.line;
   const borderWidth = card.selected ? 3 : 1;
   const unreadDot = card.unread
-    ? `<circle cx="128" cy="18" r="5" fill="${palette.unread}" stroke="${color}" stroke-width="1"/>`
+    ? `<circle cx="123" cy="18" r="4" fill="${palette.unread}" stroke="${color}" stroke-width="1"/>`
     : "";
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="${escapeXml(label)} ${escapeXml(repo)}">
   <rect width="144" height="144" fill="${palette.bg}"/>
-  <rect x="6" y="6" width="132" height="132" rx="18" fill="${palette.panel}" stroke="${border}" stroke-width="${borderWidth}"/>
-  <text x="72" y="30" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700">${escapeXml(repo)}</text>
-  <text x="72" y="55" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600">${escapeXml(worktree)}</text>
+  <rect x="6" y="6" width="132" height="132" rx="22" fill="${palette.panel}" stroke="${border}" stroke-width="${borderWidth}"/>
+  <text x="72" y="28" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700">${escapeXml(repo)}</text>
+  <text x="72" y="52" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="600">${escapeXml(worktree)}</text>
   ${unreadDot}
-  <line x1="16" y1="65" x2="128" y2="65" stroke="${palette.line}" stroke-width="1"/>
-  <text x="72" y="94" text-anchor="middle" fill="${color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24" font-weight="700" letter-spacing="0.5">${escapeXml(label)}</text>
-  <text x="14" y="126" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700">${escapeXml(badge)}${children ? ` ${escapeXml(children)}` : ""}</text>
-  <text x="130" y="126" text-anchor="end" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700">${escapeXml(elapsed)}</text>
+  <line x1="16" y1="62" x2="128" y2="62" stroke="${palette.line}" stroke-width="1"/>
+  <text x="72" y="91" text-anchor="middle" fill="${color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24" font-weight="700" letter-spacing="0.5">${escapeXml(label)}</text>
+  <text x="72" y="122" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700">${escapeXml(footer)}</text>
 </svg>`;
 }
 
@@ -189,7 +194,7 @@ export function renderEmptySlotSvg(slotIndex: number, options: SessionSvgOptions
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="Empty slot ${n}">
   <rect width="144" height="144" fill="${palette.bg}"/>
-  <rect x="8" y="8" width="128" height="128" rx="18" fill="${palette.panel}" stroke="${palette.line}" stroke-width="1"/>
+  <rect x="8" y="8" width="128" height="128" rx="22" fill="${palette.panel}" stroke="${palette.line}" stroke-width="1"/>
   <text x="72" y="66" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" font-weight="700">SLOT ${n}</text>
   <text x="72" y="98" text-anchor="middle" fill="${palette.line}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" font-weight="700">EMPTY</text>
 </svg>`;
@@ -460,7 +465,7 @@ export function renderControlSvg(
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="${face.title} ${escapeXml(face.detail)}">
   <rect width="144" height="144" fill="${palette.bg}"/>
-  <rect x="6" y="6" width="132" height="132" rx="18" fill="${palette.panel}" stroke="${face.border}" stroke-width="${face.borderWidth}"/>
+  <rect x="6" y="6" width="132" height="132" rx="22" fill="${palette.panel}" stroke="${face.border}" stroke-width="${face.borderWidth}"/>
   <text x="72" y="32" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700" letter-spacing="2">ORCA</text>
   <text x="72" y="72" text-anchor="middle" fill="${face.color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="28" font-weight="700" letter-spacing="0.5">${face.title}</text>
   ${detailSvg}
