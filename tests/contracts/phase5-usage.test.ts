@@ -370,6 +370,13 @@ describe("usage SVG faces", () => {
     assert.match(svg, /UNAVAILABLE/);
     assert.match(svg, /CLAUDE/);
     assert.match(usageSvgDataUrl(snap.faces.omp), /^data:image\/svg\+xml,/);
+    const fontSizes = [...svg.matchAll(/font-size="(\d+)"/g)].map((match) =>
+      Number(match[1]),
+    );
+    assert.ok(
+      fontSizes.every((size) => size >= 12),
+      `Usage key contains type smaller than 12px: ${fontSizes.join(", ")}`,
+    );
   });
 });
 

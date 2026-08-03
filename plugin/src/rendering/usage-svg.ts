@@ -71,26 +71,26 @@ export function renderUsageSvg(face: UsageFaceView, options: UsageSvgOptions = {
   const size = options.size ?? 144;
   const palette = options.palette ?? SESSION_PALETTE;
   const color = freshnessColor(face.freshness, palette);
-  const title = escapeXml(truncate(face.title, 12));
-  const primary = escapeXml(truncate(face.primary, 22));
-  const secondary = escapeXml(truncate(face.secondary, 28));
+  const title = escapeXml(truncate(face.title, 10));
+  const primary = escapeXml(truncate(face.primary, 15));
+  const secondary = escapeXml(truncate(face.secondary, 16));
   const fresh = escapeXml(freshnessLabel(face.freshness));
   const badge = escapeXml(metricBadge(face.metricKind));
-  const source = escapeXml(truncate(formatSourceClock(face.sourceObservedAtMs), 18));
+  const source = escapeXml(truncate(formatSourceClock(face.sourceObservedAtMs), 15));
   const borderW = face.freshness === "unavailable" ? 2 : 3;
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144">
   <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
   <rect x="6" y="6" width="132" height="132" rx="8" fill="${palette.panel}" stroke="${color}" stroke-width="${borderW}"/>
-  <text x="14" y="28" fill="${palette.muted}" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700" letter-spacing="0.08em">${title}</text>
-  <rect x="96" y="14" width="34" height="16" rx="3" fill="${color}" opacity="0.2"/>
-  <text x="113" y="26" text-anchor="middle" fill="${color}" font-family="ui-monospace,Menlo,monospace" font-size="9" font-weight="700">${badge}</text>
-  <text x="14" y="58" fill="${palette.ink}" font-family="ui-monospace,Menlo,monospace" font-size="14" font-weight="700">${primary}</text>
-  <text x="14" y="78" fill="${palette.muted}" font-family="ui-monospace,Menlo,monospace" font-size="10">${secondary}</text>
+  <text x="14" y="28" fill="${palette.muted}" font-family="ui-monospace,Menlo,monospace" font-size="12" font-weight="700" letter-spacing="0.08em">${title}</text>
+  <rect x="90" y="13" width="40" height="18" rx="3" fill="${color}" opacity="0.2"/>
+  <text x="110" y="27" text-anchor="middle" fill="${color}" font-family="ui-monospace,Menlo,monospace" font-size="12" font-weight="700">${badge}</text>
+  <text x="14" y="58" fill="${palette.ink}" font-family="ui-monospace,Menlo,monospace" font-size="15" font-weight="700">${primary}</text>
+  <text x="14" y="78" fill="${palette.muted}" font-family="ui-monospace,Menlo,monospace" font-size="12">${secondary}</text>
   <rect x="14" y="92" width="116" height="1" fill="${palette.line}"/>
-  <text x="14" y="112" fill="${color}" font-family="ui-monospace,Menlo,monospace" font-size="11" font-weight="700">${fresh}</text>
-  <text x="14" y="128" fill="${palette.muted}" font-family="ui-monospace,Menlo,monospace" font-size="9">${source}</text>
+  <text x="14" y="112" fill="${color}" font-family="ui-monospace,Menlo,monospace" font-size="12" font-weight="700">${fresh}</text>
+  <text x="14" y="129" fill="${palette.muted}" font-family="ui-monospace,Menlo,monospace" font-size="12">${source}</text>
 </svg>`;
 }
 

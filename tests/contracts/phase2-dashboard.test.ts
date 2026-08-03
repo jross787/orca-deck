@@ -46,6 +46,7 @@ import {
   formatElapsed,
   ImageWriteDebouncer,
   renderControlSvg,
+  renderEmptySlotSvg,
   renderSessionSvg,
   SESSION_PALETTE,
   sessionSvgDataUrl,
@@ -739,6 +740,13 @@ describe("card and control SVG labels colors debounce", () => {
       assert.match(svg, new RegExp(stateColor(st).replace("#", "\\#")));
       assert.equal(svg.includes("<animate"), false);
       assert.match(svg, /144/);
+      const fontSizes = [...svg.matchAll(/font-size="(\d+)"/g)].map((match) =>
+        Number(match[1]),
+      );
+      assert.ok(
+        fontSizes.every((size) => size >= 12),
+        `Session key contains type smaller than 12px: ${fontSizes.join(", ")}`,
+      );
     }
     assert.equal(formatElapsed(65_000), "1m05s");
     const csvg = renderControlSvg("next", {
@@ -763,6 +771,15 @@ describe("card and control SVG labels colors debounce", () => {
     });
     assert.match(fsvg, /FOCUS/);
     assert.match(fsvg, /NEEDS FOCUS/);
+    for (const svg of [csvg, fsvg, renderEmptySlotSvg(0)]) {
+      const fontSizes = [...svg.matchAll(/font-size="(\d+)"/g)].map((match) =>
+        Number(match[1]),
+      );
+      assert.ok(
+        fontSizes.every((size) => size >= 12),
+        `Control key contains type smaller than 12px: ${fontSizes.join(", ")}`,
+      );
+    }
     const deb = new ImageWriteDebouncer();
     const url = sessionSvgDataUrl(
       card({ logicalSessionId: "id", cardState: "idle" }),

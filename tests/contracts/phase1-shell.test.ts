@@ -257,6 +257,24 @@ describe("SVG output and write debounce", () => {
     }
   });
 
+  it("keeps every Health key label legible on physical hardware", () => {
+    const svg = renderHealthSvg({
+      state: "ready",
+      detail: "runtime available and responding",
+      orcaAppVersion: "1.4.167",
+      runtimeState: "ready",
+    });
+    const fontSizes = [...svg.matchAll(/font-size="(\d+)"/g)].map((match) =>
+      Number(match[1]),
+    );
+
+    assert.ok(fontSizes.length > 0);
+    assert.ok(
+      fontSizes.every((size) => size >= 12),
+      `Health key contains type smaller than 12px: ${fontSizes.join(", ")}`,
+    );
+  });
+
   it("includes sonar animation only for ready without reduced motion", () => {
     const animated = renderHealthSvg({ state: "ready", detail: "ok" }, { reducedMotion: false });
     assert.match(animated, /<animate /);
