@@ -176,8 +176,8 @@ export function renderSessionSvg(card: CardViewModel, options: SessionSvgOptions
   const palette = options.palette ?? SESSION_PALETTE;
   const color = stateColor(card.cardState, palette);
   const label = stateLabel(card.cardState);
-  const repo = truncate(card.repo || "repo", 16);
-  const worktree = truncate(card.worktree || "worktree", 16);
+  const repo = truncate(card.repo || "repo", 12);
+  const worktree = truncate(card.worktree || "worktree", 13);
   const badge = agentBadge(String(card.agentType));
   const elapsed = formatElapsed(card.elapsedMs);
   const children = card.ompChildCount > 0 ? `+${card.ompChildCount}` : "";
@@ -192,14 +192,14 @@ export function renderSessionSvg(card: CardViewModel, options: SessionSvgOptions
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="${escapeXml(label)} ${escapeXml(repo)}">
   <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
   <rect x="6" y="6" width="132" height="132" rx="8" fill="${palette.panel}" stroke="${border}" stroke-width="${borderWidth}"/>
-  <text x="14" y="26" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700">${escapeXml(repo)}</text>
-  <text x="14" y="44" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="600">${escapeXml(worktree)}</text>
+  <text x="14" y="27" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">${escapeXml(repo)}</text>
+  <text x="14" y="47" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">${escapeXml(worktree)}</text>
   ${unreadDot}
-  <g transform="translate(12, 54)">${icon}</g>
-  <text x="60" y="74" fill="${color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="700" letter-spacing="1">${escapeXml(label)}</text>
-  <text x="60" y="92" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12" font-weight="600">${escapeXml(badge)}${children ? ` · ${escapeXml(children)}` : ""}</text>
-  <text x="14" y="124" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">${escapeXml(elapsed)}</text>
-  <text x="130" y="124" text-anchor="end" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">${escapeXml(card.hostId === "local" ? "" : card.hostId.slice(0, 8))}</text>
+  <g transform="translate(12, 55)">${icon}</g>
+  <text x="60" y="75" fill="${color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700" letter-spacing="0.5">${escapeXml(label)}</text>
+  <text x="60" y="96" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">${escapeXml(badge)}${children ? ` · ${escapeXml(children)}` : ""}</text>
+  <text x="14" y="126" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">${escapeXml(elapsed)}</text>
+  <text x="130" y="126" text-anchor="end" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">${escapeXml(card.hostId === "local" ? "" : card.hostId.slice(0, 7))}</text>
 </svg>`;
 }
 
@@ -215,8 +215,8 @@ export function renderEmptySlotSvg(slotIndex: number, options: SessionSvgOptions
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="Empty slot ${n}">
   <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
   <rect x="8" y="8" width="128" height="128" rx="8" fill="${palette.panel}" stroke="${palette.line}" stroke-width="1"/>
-  <text x="72" y="70" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">SLOT ${n}</text>
-  <text x="72" y="92" text-anchor="middle" fill="${palette.line}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="12">EMPTY</text>
+  <text x="72" y="68" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">SLOT ${n}</text>
+  <text x="72" y="94" text-anchor="middle" fill="${palette.line}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700">EMPTY</text>
 </svg>`;
 }
 
@@ -463,6 +463,7 @@ export function renderControlSvg(
   const progress = options.progress ?? 0;
   const face = controlFace(kind, control, progress);
   const barWidth = face.bar != null ? Math.round(120 * face.bar) : 0;
+  const detail = escapeXml(face.detail);
   const barSvg =
     face.bar != null
       ? `<rect x="12" y="122" width="120" height="8" rx="3" fill="${palette.line}"/>
@@ -473,9 +474,9 @@ export function renderControlSvg(
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 144 144" role="img" aria-label="${face.title}">
   <rect width="144" height="144" rx="10" fill="${palette.bg}"/>
   <rect x="6" y="6" width="132" height="132" rx="8" fill="${palette.panel}" stroke="${face.border}" stroke-width="${face.borderWidth}"/>
-  <text x="72" y="42" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="700" letter-spacing="2">ORCA</text>
-  <text x="72" y="78" text-anchor="middle" fill="${face.color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="20" font-weight="700" letter-spacing="1">${face.title}</text>
-  <text x="72" y="104" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="13" font-weight="600">${escapeXml(face.detail)}</text>
+  <text x="72" y="40" text-anchor="middle" fill="${palette.muted}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="16" font-weight="700" letter-spacing="2">ORCA</text>
+  <text x="72" y="79" text-anchor="middle" fill="${face.color}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="22" font-weight="700" letter-spacing="1">${face.title}</text>
+  <text x="72" y="107" text-anchor="middle" fill="${palette.ink}" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14" font-weight="600">${detail}</text>
   ${barSvg}
 </svg>`;
 }

@@ -374,8 +374,8 @@ describe("usage SVG faces", () => {
       Number(match[1]),
     );
     assert.ok(
-      fontSizes.every((size) => size >= 12),
-      `Usage key contains type smaller than 12px: ${fontSizes.join(", ")}`,
+      fontSizes.every((size) => size >= 14),
+      `Usage key contains type smaller than 14px: ${fontSizes.join(", ")}`,
     );
   });
 });
