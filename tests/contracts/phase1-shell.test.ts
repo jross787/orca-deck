@@ -270,9 +270,10 @@ describe("SVG output and write debounce", () => {
 
     assert.ok(fontSizes.length > 0);
     assert.ok(
-      fontSizes.every((size) => size >= 12),
-      `Health key contains type smaller than 12px: ${fontSizes.join(", ")}`,
+      fontSizes.every((size) => size >= 14),
+      `Health key contains type smaller than 14px: ${fontSizes.join(", ")}`,
     );
+    assert.equal(svg.includes("runtime available"), false);
   });
 
   it("includes sonar animation only for ready without reduced motion", () => {
