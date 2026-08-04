@@ -39,6 +39,19 @@ type SessionActionInstance = {
   targets: Map<string, PaintTarget>;
 };
 
+type SessionActivator = {
+  selectSlot(slotIndex: number): Promise<unknown>;
+  focusSelected(): Promise<unknown>;
+};
+
+export async function activateSessionSlot(
+  runtime: SessionActivator,
+  slotIndex: number,
+): Promise<void> {
+  await runtime.selectSlot(slotIndex);
+  await runtime.focusSelected();
+}
+
 function createSessionActionClass(slotIndex: number, uuid: string) {
   @action({ UUID: uuid })
   class SessionSlotAction extends SingletonAction<SessionActionSettings> {
@@ -79,8 +92,7 @@ function createSessionActionClass(slotIndex: number, uuid: string) {
     }
 
     override async onKeyDown(_ev: KeyDownEvent<SessionActionSettings>): Promise<void> {
-      // Select only — never focus or acknowledge.
-      await this.deps.runtime.selectSlot(this.slotIndex);
+      await activateSessionSlot(this.deps.runtime, this.slotIndex);
     }
   }
 

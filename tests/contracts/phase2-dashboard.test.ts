@@ -4,7 +4,11 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { SESSION_ACTION_UUIDS, slotIndexFromUuid } from "../../plugin/src/actions/session.js";
+import {
+  activateSessionSlot,
+  SESSION_ACTION_UUIDS,
+  slotIndexFromUuid,
+} from "../../plugin/src/actions/session.js";
 import {
   ACKNOWLEDGE_UUID,
   FOCUS_UUID,
@@ -288,6 +292,25 @@ describe("stable slots overflow and no reorder", () => {
     assert.equal(after.cards.find((c) => c.logicalSessionId === "wt:a")!.slot, slotA);
     assert.equal(after.cards.find((c) => c.logicalSessionId === "wt:b")!.slot, slotB);
     assert.equal(after.cards.find((c) => c.logicalSessionId === "wt:a")!.cardState, "waiting");
+  });
+});
+
+describe("Session key activation", () => {
+  it("selects its stable slot before focusing that exact session", async () => {
+    const calls: string[] = [];
+    await activateSessionSlot(
+      {
+        selectSlot: async (slotIndex: number) => {
+          calls.push(`select:${slotIndex}`);
+        },
+        focusSelected: async () => {
+          calls.push("focus");
+        },
+      },
+      0,
+    );
+
+    assert.deepEqual(calls, ["select:0", "focus"]);
   });
 });
 
