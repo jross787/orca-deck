@@ -55,6 +55,16 @@ export type ControlActionDeps = {
   runtime: DashboardRuntime;
 };
 
+type NextAttentionActivator = {
+  nextAttention(): Promise<unknown>;
+  focusSelected(): Promise<unknown>;
+};
+
+export async function activateNextAttention(runtime: NextAttentionActivator): Promise<void> {
+  await runtime.nextAttention();
+  await runtime.focusSelected();
+}
+
 function bindKeyTarget(
   ev: WillAppearEvent<ControlActionSettings>,
   targets: Map<string, PaintTarget>,
@@ -119,7 +129,7 @@ export class NextAttentionAction extends SingletonAction<ControlActionSettings> 
   }
 
   override async onKeyDown(_ev: KeyDownEvent<ControlActionSettings>): Promise<void> {
-    await this.deps.runtime.nextAttention();
+    await activateNextAttention(this.deps.runtime);
   }
 }
 

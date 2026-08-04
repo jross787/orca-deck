@@ -11,6 +11,7 @@ import {
 } from "../../plugin/src/actions/session.js";
 import {
   ACKNOWLEDGE_UUID,
+  activateNextAttention,
   FOCUS_UUID,
   NEXT_ATTENTION_UUID,
 } from "../../plugin/src/actions/controls.js";
@@ -311,6 +312,22 @@ describe("Session key activation", () => {
     );
 
     assert.deepEqual(calls, ["select:0", "focus"]);
+  });
+});
+
+describe("Next Attention key activation", () => {
+  it("selects the next target before focusing its exact session", async () => {
+    const calls: string[] = [];
+    await activateNextAttention({
+      nextAttention: async () => {
+        calls.push("next");
+      },
+      focusSelected: async () => {
+        calls.push("focus");
+      },
+    });
+
+    assert.deepEqual(calls, ["next", "focus"]);
   });
 });
 
