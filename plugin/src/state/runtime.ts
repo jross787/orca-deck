@@ -485,9 +485,15 @@ export class DashboardRuntime {
   }
 
   async nextAttention(): Promise<DashboardSnapshot> {
+    this.deps.logger.info("next_attention_press");
     await this.ready;
     await this.refresh();
+    const selectedId = this.state.selectedLogicalSessionId;
     const target = this.snapshot.control.nextTargetId;
+    this.deps.logger.info("next_attention_target", {
+      hasTarget: target != null,
+      changesSelection: target != null && target !== selectedId,
+    });
     if (!target) return this.snapshot;
     return this.selectSession(target);
   }
