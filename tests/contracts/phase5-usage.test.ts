@@ -357,7 +357,7 @@ describe("shared refresh — no per-key usage CLI", () => {
 });
 
 describe("usage SVG faces", () => {
-  it("renders UNAVAILABLE and source clock labels", () => {
+  it("renders provider and freshness labels", () => {
     const snap = buildUsageSnapshot({
       sessions: [],
       selectedLogicalSessionId: null,
@@ -370,6 +370,14 @@ describe("usage SVG faces", () => {
     assert.match(svg, /UNAVAILABLE/);
     assert.match(svg, /CLAUDE/);
     assert.match(usageSvgDataUrl(snap.faces.omp), /^data:image\/svg\+xml,/);
+    const fontSizes = [...svg.matchAll(/font-size="(\d+)"/g)].map((match) =>
+      Number(match[1]),
+    );
+    assert.ok(
+      fontSizes.every((size) => size >= 20),
+      `Usage key contains type smaller than 20px: ${fontSizes.join(", ")}`,
+    );
+    assert.match(svg, /rx="22"/);
   });
 });
 

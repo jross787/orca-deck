@@ -4,9 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { SESSION_ACTION_UUIDS, slotIndexFromUuid } from "../../plugin/src/actions/session.js";
+import {
+  activateSessionSlot,
+  SESSION_ACTION_UUIDS,
+  slotIndexFromUuid,
+} from "../../plugin/src/actions/session.js";
 import {
   ACKNOWLEDGE_UUID,
+  activateNextAttention,
   FOCUS_UUID,
   NEXT_ATTENTION_UUID,
 } from "../../plugin/src/actions/controls.js";
@@ -46,6 +51,7 @@ import {
   formatElapsed,
   ImageWriteDebouncer,
   renderControlSvg,
+  renderEmptySlotSvg,
   renderSessionSvg,
   SESSION_PALETTE,
   sessionSvgDataUrl,
@@ -287,6 +293,41 @@ describe("stable slots overflow and no reorder", () => {
     assert.equal(after.cards.find((c) => c.logicalSessionId === "wt:a")!.slot, slotA);
     assert.equal(after.cards.find((c) => c.logicalSessionId === "wt:b")!.slot, slotB);
     assert.equal(after.cards.find((c) => c.logicalSessionId === "wt:a")!.cardState, "waiting");
+  });
+});
+
+describe("Session key activation", () => {
+  it("selects its stable slot before focusing that exact session", async () => {
+    const calls: string[] = [];
+    await activateSessionSlot(
+      {
+        selectSlot: async (slotIndex: number) => {
+          calls.push(`select:${slotIndex}`);
+        },
+        focusSelected: async () => {
+          calls.push("focus");
+        },
+      },
+      0,
+    );
+
+    assert.deepEqual(calls, ["select:0", "focus"]);
+  });
+});
+
+describe("Next Attention key activation", () => {
+  it("selects the next target before focusing its exact session", async () => {
+    const calls: string[] = [];
+    await activateNextAttention({
+      nextAttention: async () => {
+        calls.push("next");
+      },
+      focusSelected: async () => {
+        calls.push("focus");
+      },
+    });
+
+    assert.deepEqual(calls, ["next", "focus"]);
   });
 });
 
@@ -739,6 +780,20 @@ describe("card and control SVG labels colors debounce", () => {
       assert.match(svg, new RegExp(stateColor(st).replace("#", "\\#")));
       assert.equal(svg.includes("<animate"), false);
       assert.match(svg, /144/);
+      const fontSizes = [...svg.matchAll(/font-size="(\d+)"/g)].map((match) =>
+        Number(match[1]),
+      );
+      assert.ok(
+        fontSizes.every((size) => size >= 20),
+        `Session key contains type smaller than 20px: ${fontSizes.join(", ")}`,
+      );
+      assert.match(svg, /rx="22"/);
+      assert.match(
+        svg,
+        st === "working"
+          ? /text-anchor="middle"[^>]*>OMP\+2 1:05<\/text>/
+          : /text-anchor="middle"[^>]*>OMP · 1:05<\/text>/,
+      );
     }
     assert.equal(formatElapsed(65_000), "1m05s");
     const csvg = renderControlSvg("next", {
@@ -763,6 +818,16 @@ describe("card and control SVG labels colors debounce", () => {
     });
     assert.match(fsvg, /FOCUS/);
     assert.match(fsvg, /NEEDS FOCUS/);
+    for (const svg of [csvg, fsvg, renderEmptySlotSvg(0)]) {
+      const fontSizes = [...svg.matchAll(/font-size="(\d+)"/g)].map((match) =>
+        Number(match[1]),
+      );
+      assert.ok(
+        fontSizes.every((size) => size >= 20),
+        `Control key contains type smaller than 20px: ${fontSizes.join(", ")}`,
+      );
+      assert.match(svg, /rx="22"/);
+    }
     const deb = new ImageWriteDebouncer();
     const url = sessionSvgDataUrl(
       card({ logicalSessionId: "id", cardState: "idle" }),

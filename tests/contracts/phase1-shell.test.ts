@@ -198,6 +198,43 @@ describe("health refresh single CLI round", () => {
     assert.equal(action.getLastHealth()?.state, "ready");
     action.stopPolling();
   });
+  it("paints the appearing Health key before the global action registry catches up", async () => {
+    const store = new ConfigStore({
+      paths: {
+        supportDir: "/tmp/orca-deck-unused",
+        configPath: "/tmp/orca-deck-unused/config.json",
+        statePath: "/tmp/orca-deck-unused/state.json",
+        logsDir: "/tmp/orca-deck-unused-logs",
+        logPath: "/tmp/orca-deck-unused-logs/plugin.log",
+      },
+      watch: false,
+    });
+    const action = new HealthAction({
+      configStore: store,
+      logger: new RedactedLogger({ sink: () => undefined }),
+      checkHealth: async () => ({
+        state: "ready",
+        detail: "ok",
+        checkedAt: "2026-08-01T00:00:00.000Z",
+        schemaVersion: SCHEMA_VERSION,
+        checks: [],
+      }),
+    });
+    const images: string[] = [];
+
+    await action.onWillAppear({
+      action: {
+        id: "health-1",
+        setImage: async (image: string) => {
+          images.push(image);
+        },
+      },
+    } as unknown as Parameters<HealthAction["onWillAppear"]>[0]);
+
+    assert.equal(images.length, 1);
+    assert.match(decodeURIComponent(images[0] ?? ""), /font-size="28"/);
+    action.stopPolling();
+  });
 });
 
 
@@ -255,6 +292,26 @@ describe("SVG output and write debounce", () => {
       const url = healthSvgDataUrl({ state, detail: "x" });
       assert.ok(url.startsWith("data:image/svg+xml,"));
     }
+  });
+
+  it("keeps every Health key label legible on physical hardware", () => {
+    const svg = renderHealthSvg({
+      state: "ready",
+      detail: "runtime available and responding",
+      orcaAppVersion: "1.4.167",
+      runtimeState: "ready",
+    });
+    const fontSizes = [...svg.matchAll(/font-size="(\d+)"/g)].map((match) =>
+      Number(match[1]),
+    );
+
+    assert.ok(fontSizes.length > 0);
+    assert.ok(
+      fontSizes.every((size) => size >= 20),
+      `Health key contains type smaller than 20px: ${fontSizes.join(", ")}`,
+    );
+    assert.match(svg, /rx="22"/);
+    assert.equal(svg.includes("runtime available"), false);
   });
 
   it("includes sonar animation only for ready without reduced motion", () => {
